@@ -108,14 +108,18 @@ class MainActivity : AppCompatActivity() {
         /****************
          * TEST
          ****************/
-        val a=1
+
+        val a: Int = 1
 
         // Request required permission
-        requestPermissions(arrayOf(
-            Manifest.permission.BLUETOOTH,
-            Manifest.permission.BLUETOOTH_SCAN,
-            Manifest.permission.BLUETOOTH_CONNECT),
-            1)
+        requestPermissions(
+            arrayOf(
+                Manifest.permission.BLUETOOTH,
+                Manifest.permission.BLUETOOTH_SCAN,
+                Manifest.permission.BLUETOOTH_CONNECT
+            ),
+            1
+        )
 
 //        if (ActivityCompat.checkSelfPermission(this,Manifest.permission.BLUETOOTH_SCAN) != PackageManager.PERMISSION_GRANTED) {
 //            println("SCAN VER"+PackageManager.PERMISSION_GRANTED)
@@ -131,15 +135,17 @@ class MainActivity : AppCompatActivity() {
 //        }
 
         NavigationBarView.OnItemSelectedListener { item ->
-            when(item.itemId) {
+            when (item.itemId) {
                 R.id.item_scan -> {
                     // Respond to navigation item 1 click
                     true
                 }
+
                 R.id.item_bonded -> {
                     // Respond to navigation item 2 click
                     true
                 }
+
                 else -> false
             }
         }
@@ -188,8 +194,7 @@ class MainActivity : AppCompatActivity() {
      *******************************************/
 
     private fun promptEnableBluetooth() {
-        if (!bluetoothAdapter.isEnabled)
-        {
+        if (!bluetoothAdapter.isEnabled) {
             val enableBtIntent = Intent(BluetoothAdapter.ACTION_REQUEST_ENABLE)
             startActivityForResult(enableBtIntent, ENABLE_BLUETOOTH_REQUEST_CODE)
         }
@@ -198,8 +203,7 @@ class MainActivity : AppCompatActivity() {
     private fun startBleScan() {
         if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.M && !isBluetoothPermissionGranted) {
             requestBluetoothPermission()
-        }
-        else {
+        } else {
             scanResults.clear()
             scanResultAdapter.notifyDataSetChanged()
             bleScanner.startScan(null, scanSettings, scanCallback)
@@ -213,7 +217,11 @@ class MainActivity : AppCompatActivity() {
                 Manifest.permission.BLUETOOTH_SCAN
             ) != PackageManager.PERMISSION_GRANTED
         ) {
-            ActivityCompat.requestPermissions(this@MainActivity,arrayOf(Manifest.permission.BLUETOOTH_SCAN), 1)
+            ActivityCompat.requestPermissions(
+                this@MainActivity,
+                arrayOf(Manifest.permission.BLUETOOTH_SCAN),
+                1
+            )
             // TODO: Consider calling
             //    ActivityCompat#requestPermissions
             // here to request the missing permissions, and then overriding
@@ -226,13 +234,18 @@ class MainActivity : AppCompatActivity() {
         isScanning = false
     }
 
-    private fun requestBluetoothPermission(){
+    private fun requestBluetoothPermission() {
         runOnUiThread {
             alert {
                 title = "Bluetooth permission required"
                 isCancelable = false
                 positiveButton(android.R.string.ok) {
-                    requestPermissions(arrayOf(Manifest.permission.BLUETOOTH_SCAN, Manifest.permission.BLUETOOTH_CONNECT),BLUETOOTH_SCAN_PERMISSION_REQUEST_CODE)
+                    requestPermissions(
+                        arrayOf(
+                            Manifest.permission.BLUETOOTH_SCAN,
+                            Manifest.permission.BLUETOOTH_CONNECT
+                        ), BLUETOOTH_SCAN_PERMISSION_REQUEST_CODE
+                    )
 
 //                    requestPermission(
 //                        Manifest.permission.BLUETOOTH_SCAN,
