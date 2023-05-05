@@ -1,66 +1,31 @@
 <component name="ProjectCodeStyleConfiguration">
   <code_scheme name="Project" version="173">
-    <option name="SOFT_MARGINS" value="120" />
-    <AndroidXmlCodeStyleSettings>
-      <option name="LAYOUT_SETTINGS">
-        <value>
-          <option name="INSERT_LINE_BREAK_BEFORE_NAMESPACE_DECLARATION" value="true" />
-          <option name="INSERT_LINE_BREAK_AFTER_LAST_ATTRIBUTE" value="true" />
-        </value>
-      </option>
-      <option name="MANIFEST_SETTINGS">
-        <value>
-          <option name="INSERT_LINE_BREAK_BEFORE_NAMESPACE_DECLARATION" value="true" />
-          <option name="INSERT_LINE_BREAK_AFTER_LAST_ATTRIBUTE" value="true" />
-        </value>
-      </option>
-      <option name="VALUE_RESOURCE_FILE_SETTINGS">
-        <value>
-          <option name="WRAP_ATTRIBUTES" value="2" />
-        </value>
-      </option>
-      <option name="OTHER_SETTINGS">
-        <value>
-          <option name="INSERT_LINE_BREAK_BEFORE_NAMESPACE_DECLARATION" value="true" />
-          <option name="INSERT_LINE_BREAK_AFTER_LAST_ATTRIBUTE" value="true" />
-        </value>
-      </option>
-    </AndroidXmlCodeStyleSettings>
-    <JavaCodeStyleSettings>
-      <option name="CLASS_NAMES_IN_JAVADOC" value="3" />
-      <option name="CLASS_COUNT_TO_USE_IMPORT_ON_DEMAND" value="999" />
-      <option name="NAMES_COUNT_TO_USE_IMPORT_ON_DEMAND" value="999" />
-      <option name="IMPORT_LAYOUT_TABLE">
-        <value>
-          <package name="android" withSubpackages="true" static="false" />
-          <emptyLine />
-          <package name="com" withSubpackages="true" static="false" />
-          <emptyLine />
-          <package name="junit" withSubpackages="true" static="false" />
-          <emptyLine />
-          <package name="net" withSubpackages="true" static="false" />
-          <emptyLine />
-          <package name="org" withSubpackages="true" static="false" />
-          <emptyLine />
-          <package name="java" withSubpackages="true" static="false" />
-          <emptyLine />
-          <package name="javax" withSubpackages="true" static="false" />
-          <emptyLine />
-          <package name="" withSubpackages="true" static="false" />
-          <emptyLine />
-          <package name="" withSubpackages="true" static="true" />
-          <emptyLine />
-        </value>
-      </option>
-    </JavaCodeStyleSettings>
     <JetCodeStyleSettings>
+      <option name="SPACE_BEFORE_WHEN_PARENTHESES" value="false" />
+      <option name="LBRACE_ON_NEXT_LINE" value="true" />
       <option name="CODE_STYLE_DEFAULTS" value="KOTLIN_OFFICIAL" />
     </JetCodeStyleSettings>
-    <XML>
-      <option name="XML_ATTRIBUTE_WRAP" value="2" />
-      <option name="XML_KEEP_BLANK_LINES" value="1" />
-    </XML>
+    <editorconfig>
+      <option name="ENABLED" value="false" />
+    </editorconfig>
+    <codeStyleSettings language="JAVA">
+      <option name="BRACE_STYLE" value="2" />
+      <option name="CLASS_BRACE_STYLE" value="2" />
+      <option name="METHOD_BRACE_STYLE" value="2" />
+      <option name="LAMBDA_BRACE_STYLE" value="2" />
+      <option name="ELSE_ON_NEW_LINE" value="true" />
+      <option name="WHILE_ON_NEW_LINE" value="true" />
+      <option name="CATCH_ON_NEW_LINE" value="true" />
+      <option name="FINALLY_ON_NEW_LINE" value="true" />
+      <option name="SPACE_BEFORE_IF_PARENTHESES" value="false" />
+      <option name="SPACE_BEFORE_WHILE_PARENTHESES" value="false" />
+      <option name="SPACE_BEFORE_FOR_PARENTHESES" value="false" />
+      <option name="SPACE_BEFORE_TRY_PARENTHESES" value="false" />
+      <option name="SPACE_BEFORE_CATCH_PARENTHESES" value="false" />
+      <option name="SPACE_BEFORE_SWITCH_PARENTHESES" value="false" />
+    </codeStyleSettings>
     <codeStyleSettings language="XML">
+      <option name="FORCE_REARRANGE_MODE" value="1" />
       <indentOptions>
         <option name="CONTINUATION_INDENT_SIZE" value="4" />
       </indentOptions>
@@ -174,8 +139,13 @@
     </codeStyleSettings>
     <codeStyleSettings language="kotlin">
       <option name="CODE_STYLE_DEFAULTS" value="KOTLIN_OFFICIAL" />
+      <option name="KEEP_LINE_BREAKS" value="false" />
+      <option name="SPACE_BEFORE_IF_PARENTHESES" value="false" />
+      <option name="SPACE_BEFORE_WHILE_PARENTHESES" value="false" />
+      <option name="SPACE_BEFORE_FOR_PARENTHESES" value="false" />
+      <option name="SPACE_BEFORE_CATCH_PARENTHESES" value="false" />
       <indentOptions>
-        <option name="CONTINUATION_INDENT_SIZE" value="4" />
+        <option name="KEEP_INDENTS_ON_EMPTY_LINES" value="true" />
       </indentOptions>
     </codeStyleSettings>
   </code_scheme>

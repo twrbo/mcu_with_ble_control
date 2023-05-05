@@ -56,4 +56,13 @@
         app:menu="@menu/bottom_navigation_menu"
         />
 
+    <SearchView
+        android:id="@+id/searchView"
+        android:layout_width="135dp"
+        android:layout_height="54dp"
+        android:layout_marginStart="11dp"
+        android:layout_marginTop="16dp"
+        app:layout_constraintStart_toEndOf="@+id/scan_button"
+        app:layout_constraintTop_toTopOf="parent" />
+
 </androidx.constraintlayout.widget.ConstraintLayout>
