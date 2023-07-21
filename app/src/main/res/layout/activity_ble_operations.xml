@@ -54,27 +54,27 @@
         android:id="@+id/characteristics_title"
         android:layout_width="wrap_content"
         android:layout_height="wrap_content"
-        android:layout_marginTop="16dp"
         android:layout_marginStart="16dp"
+        android:layout_marginTop="5dp"
         android:text="Characteristics"
-        android:textStyle="bold"
         android:textSize="16sp"
-        app:layout_constraintTop_toBottomOf="@id/mtu_container"
-        app:layout_constraintStart_toStartOf="parent" />
+        android:textStyle="bold"
+        app:layout_constraintStart_toStartOf="parent"
+        app:layout_constraintTop_toBottomOf="@+id/constraintLayout2" />
 
     <LinearLayout
-        app:layout_constraintTop_toBottomOf="@id/characteristics_title"
-        app:layout_constraintBottom_toBottomOf="parent"
-        app:layout_constraintStart_toStartOf="parent"
-        app:layout_constraintEnd_toEndOf="parent"
+        android:id="@+id/linearLayout3"
+        android:layout_width="0dp"
+        android:layout_height="551dp"
         android:orientation="vertical"
-        android:layout_width="match_parent"
-        android:layout_height="0dp">
+        app:layout_constraintEnd_toEndOf="parent"
+        app:layout_constraintStart_toStartOf="parent"
+        app:layout_constraintTop_toBottomOf="@+id/characteristics_title">
 
         <androidx.recyclerview.widget.RecyclerView
             android:id="@+id/characteristics_recycler_view"
             android:layout_width="match_parent"
-            android:layout_height="0dp"
+            android:layout_height="205dp"
             android:layout_weight="1"
             android:scrollbarFadeDuration="0"
             android:scrollbars="vertical"
@@ -84,28 +84,96 @@
             android:id="@+id/log_title"
             android:layout_width="wrap_content"
             android:layout_height="wrap_content"
-            android:layout_marginTop="16dp"
             android:layout_marginStart="16dp"
+            android:layout_marginTop="16dp"
             android:text="Log"
-            android:textStyle="bold"
-            android:textSize="16sp" />
+            android:textSize="16sp"
+            android:textStyle="bold" />
 
         <ScrollView
             android:id="@+id/log_scroll_view"
             android:layout_width="match_parent"
             android:layout_height="0dp"
             android:layout_weight="1"
-            android:padding="4dp">
+            android:padding="16dp">
 
             <TextView
                 android:id="@+id/log_text_view"
-                android:scrollbars="vertical"
-                android:gravity="bottom"
                 android:layout_width="match_parent"
-                android:layout_height="wrap_content" />
+                android:layout_height="wrap_content"
+                android:gravity="bottom"
+                android:scrollbars="vertical" />
 
         </ScrollView>
 
     </LinearLayout>
+
+    <androidx.constraintlayout.widget.ConstraintLayout
+        android:id="@+id/constraintLayout2"
+        android:layout_width="0dp"
+        android:layout_height="93dp"
+        android:layout_marginStart="16dp"
+        android:layout_marginTop="1dp"
+        app:layout_constraintStart_toStartOf="parent"
+        app:layout_constraintTop_toBottomOf="@+id/mtu_container">
+
+        <androidx.constraintlayout.widget.ConstraintLayout
+            android:id="@+id/constraintLayout_deviceName"
+            android:layout_width="0dp"
+            android:layout_height="42dp"
+            app:layout_constraintStart_toStartOf="parent"
+            app:layout_constraintTop_toTopOf="parent">
+
+            <TextView
+                android:id="@+id/deviceName_title"
+                android:layout_width="wrap_content"
+                android:layout_height="wrap_content"
+                android:text="Device Name"
+                android:textSize="16sp"
+                android:textStyle="bold"
+                app:layout_constraintStart_toStartOf="parent"
+                app:layout_constraintTop_toTopOf="parent" />
+
+            <TextView
+                android:id="@+id/tv_deviceName"
+                android:layout_width="wrap_content"
+                android:layout_height="wrap_content"
+                android:layout_marginTop="1dp"
+                android:text="TextView"
+                android:textSize="14sp"
+                app:layout_constraintStart_toStartOf="parent"
+                app:layout_constraintTop_toBottomOf="@+id/deviceName_title" />
+        </androidx.constraintlayout.widget.ConstraintLayout>
+
+        <androidx.constraintlayout.widget.ConstraintLayout
+            android:id="@+id/constraintLayout_deviceMAC"
+            android:layout_width="0dp"
+            android:layout_height="42dp"
+            android:layout_marginTop="5dp"
+            app:layout_constraintStart_toStartOf="parent"
+            app:layout_constraintTop_toBottomOf="@+id/constraintLayout_deviceName">
+
+            <TextView
+                android:id="@+id/deviceMAC_title"
+                android:layout_width="wrap_content"
+                android:layout_height="wrap_content"
+                android:text="MAC Address"
+                android:textSize="16sp"
+                android:textStyle="bold"
+                app:layout_constraintStart_toStartOf="parent"
+                app:layout_constraintTop_toTopOf="parent" />
+
+            <TextView
+                android:id="@+id/tv_deviceMAC"
+                android:layout_width="wrap_content"
+                android:layout_height="wrap_content"
+                android:text="TextView"
+                android:textSize="14sp"
+                app:layout_constraintStart_toStartOf="parent"
+                app:layout_constraintTop_toBottomOf="@+id/deviceMAC_title" />
+
+        </androidx.constraintlayout.widget.ConstraintLayout>
+
+    </androidx.constraintlayout.widget.ConstraintLayout>
 
 </androidx.constraintlayout.widget.ConstraintLayout>

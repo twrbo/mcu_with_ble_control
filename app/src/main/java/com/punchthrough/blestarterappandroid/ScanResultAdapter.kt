@@ -25,7 +25,9 @@ import kotlinx.android.synthetic.main.row_scan_result.view.mac_address
 import kotlinx.android.synthetic.main.row_scan_result.view.signal_strength
 import org.jetbrains.anko.layoutInflater
 
-class ScanResultAdapter(private val items: List<ScanResult>, private val onClickListener: ((device: ScanResult) -> Unit)) : RecyclerView.Adapter<ScanResultAdapter.ViewHolder>()
+class ScanResultAdapter(
+    private val items: List<ScanResult>, private val onClickListener: ((device: ScanResult) -> Unit)
+) : RecyclerView.Adapter<ScanResultAdapter.ViewHolder>()
 {
     private var filteredItems: List<ScanResult> = items
     override fun onCreateViewHolder(parent: ViewGroup, viewType: Int): ViewHolder
@@ -42,7 +44,9 @@ class ScanResultAdapter(private val items: List<ScanResult>, private val onClick
         holder.bind(item)
     }
     
-    class ViewHolder(private val view: View, private val onClickListener: ((device: ScanResult) -> Unit)) : RecyclerView.ViewHolder(view)
+    class ViewHolder(
+        private val view: View, private val onClickListener: ((device: ScanResult) -> Unit)
+    ) : RecyclerView.ViewHolder(view)
     {
         fun bind(result: ScanResult)
         {
@@ -54,10 +58,15 @@ class ScanResultAdapter(private val items: List<ScanResult>, private val onClick
     }
     
     
-    fun searchDevices(query: String) {
-        filteredItems = if (query.isBlank()) {
+    
+    fun searchDevices(query: String)
+    {
+        filteredItems = if(query.isBlank())
+        {
             items
-        } else {
+        }
+        else
+        {
             items.filter { it.device.name?.contains(query, true) == true }
         }
         notifyDataSetChanged()

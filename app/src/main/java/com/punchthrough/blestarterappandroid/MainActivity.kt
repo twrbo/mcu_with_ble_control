@@ -67,7 +67,8 @@ class MainActivity : AppCompatActivity()
         bluetoothAdapter.bluetoothLeScanner
     }
     
-    private val scanSettings = ScanSettings.Builder().setScanMode(ScanSettings.SCAN_MODE_LOW_LATENCY).build()
+    private val scanSettings =
+        ScanSettings.Builder().setScanMode(ScanSettings.SCAN_MODE_LOW_LATENCY).build()
     
     private var isScanning = false
         set(value)
@@ -111,12 +112,15 @@ class MainActivity : AppCompatActivity()
         // OnClick Event
         scan_button.setOnClickListener { if(isScanning) stopBleScan() else startBleScan() }
         
-        searchView.setOnQueryTextListener(object : SearchView.OnQueryTextListener {
-            override fun onQueryTextSubmit(query: String?): Boolean {
+        searchView.setOnQueryTextListener(object : SearchView.OnQueryTextListener
+        {
+            override fun onQueryTextSubmit(query: String?): Boolean
+            {
                 return true
             }
-        
-            override fun onQueryTextChange(newText: String?): Boolean {
+            
+            override fun onQueryTextChange(newText: String?): Boolean
+            {
                 if(newText != null)
                 {
                     scanResultAdapter.searchDevices(newText)
@@ -133,7 +137,13 @@ class MainActivity : AppCompatActivity()
          ****************/
         
         // Request required permission
-        requestPermissions(arrayOf(Manifest.permission.BLUETOOTH, Manifest.permission.BLUETOOTH_SCAN, Manifest.permission.BLUETOOTH_CONNECT), 1)
+        requestPermissions(
+            arrayOf(
+                Manifest.permission.BLUETOOTH,
+                Manifest.permission.BLUETOOTH_SCAN,
+                Manifest.permission.BLUETOOTH_CONNECT
+            ), 1
+        )
 
 //        if (ActivityCompat.checkSelfPermission(this,Manifest.permission.BLUETOOTH_SCAN) != PackageManager.PERMISSION_GRANTED) {
 //            println("SCAN VER"+PackageManager.PERMISSION_GRANTED)
@@ -195,7 +205,11 @@ class MainActivity : AppCompatActivity()
         }
     }
     
-    override fun onRequestPermissionsResult(requestCode: Int, permissions: Array<out String>, grantResults: IntArray)
+    override fun onRequestPermissionsResult(
+        requestCode: Int,
+        permissions: Array<out String>,
+        grantResults: IntArray
+    )
     {
         super.onRequestPermissionsResult(requestCode, permissions, grantResults)
         when(requestCode)
@@ -205,8 +219,7 @@ class MainActivity : AppCompatActivity()
                 if(grantResults.firstOrNull() == PackageManager.PERMISSION_DENIED)
                 {
                     requestBluetoothPermission()
-                }
-                else
+                } else
                 {
                     startBleScan()
                 }
@@ -232,8 +245,7 @@ class MainActivity : AppCompatActivity()
         if(Build.VERSION.SDK_INT >= Build.VERSION_CODES.M && !isBluetoothPermissionGranted)
         {
             requestBluetoothPermission()
-        }
-        else
+        } else
         {
             scanResults.clear()
             scanResultAdapter.notifyDataSetChanged()
@@ -244,9 +256,17 @@ class MainActivity : AppCompatActivity()
     
     private fun stopBleScan()
     {
-        if(ActivityCompat.checkSelfPermission(this, Manifest.permission.BLUETOOTH_SCAN) != PackageManager.PERMISSION_GRANTED)
+        if(ActivityCompat.checkSelfPermission(
+                this,
+                Manifest.permission.BLUETOOTH_SCAN
+            ) != PackageManager.PERMISSION_GRANTED
+        )
         {
-            ActivityCompat.requestPermissions(this@MainActivity, arrayOf(Manifest.permission.BLUETOOTH_SCAN), 1)
+            ActivityCompat.requestPermissions(
+                this@MainActivity,
+                arrayOf(Manifest.permission.BLUETOOTH_SCAN),
+                1
+            )
             // TODO: Consider calling
             //    ActivityCompat#requestPermissions
             // here to request the missing permissions, and then overriding
@@ -266,7 +286,12 @@ class MainActivity : AppCompatActivity()
                 title = "Bluetooth permission required"
                 isCancelable = false
                 positiveButton(android.R.string.ok) {
-                    requestPermissions(arrayOf(Manifest.permission.BLUETOOTH_SCAN, Manifest.permission.BLUETOOTH_CONNECT), BLUETOOTH_SCAN_PERMISSION_REQUEST_CODE)
+                    requestPermissions(
+                        arrayOf(
+                            Manifest.permission.BLUETOOTH_SCAN,
+                            Manifest.permission.BLUETOOTH_CONNECT
+                        ), BLUETOOTH_SCAN_PERMISSION_REQUEST_CODE
+                    )
 
 //                    requestPermission(
 //                        Manifest.permission.BLUETOOTH_SCAN,
@@ -291,10 +316,14 @@ class MainActivity : AppCompatActivity()
         runOnUiThread {
             alert {
                 title = "Location permission required"
-                message = "Starting from Android M (6.0), the system requires apps to be granted " + "location access in order to scan for BLE devices."
+                message =
+                    "Starting from Android M (6.0), the system requires apps to be granted " + "location access in order to scan for BLE devices."
                 isCancelable = false
                 positiveButton(android.R.string.ok) {
-                    requestPermission(Manifest.permission.ACCESS_FINE_LOCATION, LOCATION_PERMISSION_REQUEST_CODE)
+                    requestPermission(
+                        Manifest.permission.ACCESS_FINE_LOCATION,
+                        LOCATION_PERMISSION_REQUEST_CODE
+                    )
                 }
             }.show()
         }
@@ -328,8 +357,7 @@ class MainActivity : AppCompatActivity()
             { // A scan result already exists with the same address
                 scanResults[indexQuery] = result
                 scanResultAdapter.notifyItemChanged(indexQuery)
-            }
-            else
+            } else
             {
                 with(result.device) {
                     Timber.i("Found BLE device! Name: ${name ?: "Unnamed"}, address: $address")
@@ -372,7 +400,10 @@ class MainActivity : AppCompatActivity()
     
     private fun Context.hasPermission(permissionType: String): Boolean
     {
-        return ContextCompat.checkSelfPermission(this, permissionType) == PackageManager.PERMISSION_GRANTED
+        return ContextCompat.checkSelfPermission(
+            this,
+            permissionType
+        ) == PackageManager.PERMISSION_GRANTED
     }
     
     private fun Activity.requestPermission(permission: String, requestCode: Int)

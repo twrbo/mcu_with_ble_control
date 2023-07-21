@@ -1,5 +1,4 @@
-<?xml version="1.0" encoding="utf-8"?>
-<!--
+<?xml version="1.0" encoding="utf-8"?><!--
   ~ Copyright 2019 Punch Through Design LLC
   ~
   ~ Licensed under the Apache License, Version 2.0 (the "License");
@@ -14,12 +13,41 @@
   ~ See the License for the specific language governing permissions and
   ~ limitations under the License.
   -->
-
-<EditText xmlns:android="http://schemas.android.com/apk/res/android"
+<LinearLayout xmlns:android="http://schemas.android.com/apk/res/android"
+    xmlns:app="http://schemas.android.com/apk/res-auto"
+    xmlns:tools="http://schemas.android.com/tools"
     android:layout_width="match_parent"
-    android:layout_height="wrap_content"
-    android:maxLines="1"
-    android:hint="Enter payload in hex (0-9, a-f, A-F)"
-    android:digits="0123456789abcdefABCDEF"
-    android:importantForAutofill="no"
-    android:inputType="text" />
+    android:layout_height="match_parent"
+    android:orientation="vertical">
+
+    <RadioGroup
+        android:layout_width="match_parent"
+        android:orientation="horizontal"
+        android:layout_height="wrap_content">
+
+        <RadioButton
+            android:id="@+id/radioButton_write"
+            android:layout_width="wrap_content"
+            android:layout_height="wrap_content"
+            android:layout_weight="1"
+            android:text="MCU Write" />
+
+        <RadioButton
+            android:id="@+id/radioButton_read"
+            android:layout_width="wrap_content"
+            android:layout_height="wrap_content"
+            android:layout_weight="1"
+            android:text="MCU Read" />
+    </RadioGroup>
+
+
+    <EditText
+        android:id="@+id/editText_payload"
+        android:layout_width="match_parent"
+        android:layout_height="wrap_content"
+        android:digits="0123456789abcdefABCDEF"
+        android:hint="Enter payload in hex (0-9, a-f, A-F)"
+        android:importantForAutofill="no"
+        android:inputType="text" />
+
+</LinearLayout>
