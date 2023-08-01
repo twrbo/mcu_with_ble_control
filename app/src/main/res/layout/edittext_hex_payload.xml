@@ -30,6 +30,7 @@
             android:layout_width="wrap_content"
             android:layout_height="wrap_content"
             android:layout_weight="1"
+            android:checked="true"
             android:text="MCU Write" />
 
         <RadioButton
@@ -47,6 +48,15 @@
         android:layout_height="wrap_content"
         android:digits="0123456789abcdefABCDEF"
         android:hint="Enter payload in hex (0-9, a-f, A-F)"
+        android:importantForAutofill="no"
+        android:inputType="text" />
+
+    <EditText
+        android:id="@+id/editText_dataLength"
+        android:visibility="invisible"
+        android:layout_width="match_parent"
+        android:layout_height="wrap_content"
+        android:hint="Enter data length in decimal"
         android:importantForAutofill="no"
         android:inputType="text" />
 

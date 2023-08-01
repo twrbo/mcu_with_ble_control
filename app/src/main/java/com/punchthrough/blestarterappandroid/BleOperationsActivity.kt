@@ -27,6 +27,7 @@ import android.view.View
 import android.view.inputmethod.InputMethodManager
 import android.widget.EditText
 import android.widget.RadioButton
+import androidx.appcompat.app.AlertDialog
 import androidx.appcompat.app.AppCompatActivity
 import androidx.recyclerview.widget.LinearLayoutManager
 import androidx.recyclerview.widget.RecyclerView
@@ -107,7 +108,8 @@ class BleOperationsActivity : AppCompatActivity()
                     log("Requesting for MTU value of $mtu")
                     ConnectionManager.requestMtu(device, mtu)
                 } ?: log("Invalid MTU value: ${mtu_field.text}")
-            } else
+            }
+            else
             {
                 log("Please specify a numeric value for desired ATT MTU (23-517)")
             }
@@ -164,7 +166,8 @@ class BleOperationsActivity : AppCompatActivity()
             val currentLogText = if(log_text_view.text.isEmpty())
             {
                 "Beginning of log."
-            } else
+            }
+            else
             {
                 log_text_view.text
             }
@@ -196,7 +199,8 @@ class BleOperationsActivity : AppCompatActivity()
                         {
                             log("Disabling notifications on ${characteristic.uuid}")
                             ConnectionManager.disableNotifications(device, characteristic)
-                        } else
+                        }
+                        else
                         {
                             log("Enabling notifications on ${characteristic.uuid}")
                             ConnectionManager.enableNotifications(device, characteristic)
@@ -208,33 +212,39 @@ class BleOperationsActivity : AppCompatActivity()
     }
     
     @SuppressLint("InflateParams")
-    private fun showWritePayloadDialog(characteristic: BluetoothGattCharacteristic)
-    {
-//        val hexField = layoutInflater.inflate(R.layout.edittext_hex_payload, null) as EditText
+    private fun showWritePayloadDialog(characteristic: BluetoothGattCharacteristic) {
         val view = layoutInflater.inflate(R.layout.edittext_hex_payload, null)
         val hexField = view.findViewById<EditText>(R.id.editText_payload)
         val radioButtonMCURead = view.findViewById<RadioButton>(R.id.radioButton_read)
+        val editTextDataLength = view.findViewById<EditText>(R.id.editText_dataLength)
         
-        alert {
+        // 增加 radioButtonMCURead 的點選事件監聽器
+        radioButtonMCURead.setOnCheckedChangeListener { _, isChecked ->
+            // 根據 isChecked 決定是否顯示 editTextDataLength
+            editTextDataLength.visibility = if (isChecked) View.VISIBLE else View.GONE
+        }
+        
+        alert("Operation") {
             customView = view
             isCancelable = false
-            yesButton {
+            positiveButton("Yes") {
                 with(hexField.text.toString()) {
-                    if(isNotBlank() && isNotEmpty())
-                    {
+                    if (isNotBlank() && isNotEmpty()) {
                         val bytes = hexToBytes()
                         log("Writing to ${characteristic.uuid}: ${bytes.toHexString()}")
-                        if(radioButtonMCURead.isChecked)
+                        if (radioButtonMCURead.isChecked) {
+                            editTextDataLength.visibility = View.VISIBLE
                             ConnectionManager.MCU_Read(device, characteristic, bytes)
-                        else
+                        } else {
+                            editTextDataLength.visibility = View.INVISIBLE
                             ConnectionManager.MCU_Write(device, characteristic, bytes)
-                    } else
-                    {
+                        }
+                    } else {
                         log("Please enter a hex payload to write to ${characteristic.uuid}")
                     }
                 }
             }
-            noButton {}
+            negativeButton("No") {}
         }.show()
         hexField.showKeyboard()
     }

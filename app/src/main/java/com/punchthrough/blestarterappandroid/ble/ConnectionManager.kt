@@ -160,9 +160,12 @@ object ConnectionManager
         if(device.isConnected())
         {
 //            var modifiedPayload = byteArrayOf(0x11) + payload
-    
-//            val intArray = IntArray(512) { i -> i + 1 }
-//            enqueueOperation(CharacteristicWrite(device, characteristic.uuid, writeType, intArray))
+            
+            val length: Int =
+                ((payload[0].toInt() shr 4) and 0xF) * 16 * 16 + (payload[0].toInt() and 0x0F) * 16 + (payload[1].toInt()) * 1
+            Log.e("ValueL", length.toString());
+            val data = ByteArray(length) { i -> (i).toByte() }
+            enqueueOperation(CharacteristicWrite(device, characteristic.uuid, writeType, data))
             enqueueOperation(CharacteristicRead(device, characteristic.uuid))
             
             // wait 1 second
