@@ -16,19 +16,21 @@
 
 package com.punchthrough.blestarterappandroid
 
+import android.Manifest
 import android.annotation.SuppressLint
 import android.app.Activity
 import android.bluetooth.BluetoothDevice
 import android.bluetooth.BluetoothGattCharacteristic
 import android.content.Context
+import android.content.pm.PackageManager
 import android.os.Bundle
 import android.view.MenuItem
 import android.view.View
 import android.view.inputmethod.InputMethodManager
 import android.widget.EditText
 import android.widget.RadioButton
-import androidx.appcompat.app.AlertDialog
 import androidx.appcompat.app.AppCompatActivity
+import androidx.core.app.ActivityCompat
 import androidx.recyclerview.widget.LinearLayoutManager
 import androidx.recyclerview.widget.RecyclerView
 import androidx.recyclerview.widget.SimpleItemAnimator
@@ -48,9 +50,7 @@ import kotlinx.android.synthetic.main.activity_ble_operations.request_mtu_button
 import kotlinx.android.synthetic.main.activity_ble_operations.tv_deviceMAC
 import kotlinx.android.synthetic.main.activity_ble_operations.tv_deviceName
 import org.jetbrains.anko.alert
-import org.jetbrains.anko.noButton
 import org.jetbrains.anko.selector
-import org.jetbrains.anko.yesButton
 import java.text.SimpleDateFormat
 import java.util.Date
 import java.util.Locale
@@ -137,6 +137,7 @@ class BleOperationsActivity : AppCompatActivity()
         return super.onOptionsItemSelected(item)
     }
     
+    
     private fun setupRecyclerView()
     {
         characteristics_recycler_view.apply {
@@ -148,6 +149,11 @@ class BleOperationsActivity : AppCompatActivity()
         }
         
         // 0505 Add device name info
+        if(ActivityCompat.checkSelfPermission(this, Manifest.permission.BLUETOOTH_CONNECT) != PackageManager.PERMISSION_GRANTED)
+        {
+            ActivityCompat.requestPermissions(this, arrayOf(Manifest.permission.BLUETOOTH_CONNECT), BLUETOOTH_CONNECT_PERMISSION_REQUEST_CODE)
+            return
+        }
         tv_deviceName.text = device.name
         tv_deviceMAC.text = device.address
         
@@ -325,5 +331,5 @@ class BleOperationsActivity : AppCompatActivity()
     }
     
     private fun String.hexToBytes() =
-        this.chunked(2).map { it.toUpperCase(Locale.US).toInt(16).toByte() }.toByteArray()
+        this.chunked(2).map { it.uppercase(Locale.US).toInt(16).toByte() }.toByteArray()
 }
