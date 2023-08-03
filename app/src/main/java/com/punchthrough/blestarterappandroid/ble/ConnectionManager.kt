@@ -38,7 +38,6 @@ import androidx.core.app.ActivityCompat
 import com.punchthrough.blestarterappandroid.BLUETOOTH_CONNECT_PERMISSION_REQUEST_CODE
 import com.punchthrough.blestarterappandroid.BLUETOOTH_SCAN_PERMISSION_REQUEST_CODE
 
-
 private const val GATT_MIN_MTU_SIZE = 23
 
 /** Maximum BLE MTU size as defined in gatt_api.h. */
@@ -124,8 +123,7 @@ object ConnectionManager
     }
     
     
-    fun writeCharacteristic(
-            device: BluetoothDevice, characteristic: BluetoothGattCharacteristic, payload: ByteArray, context: Context)
+    fun writeCharacteristic(device: BluetoothDevice, characteristic: BluetoothGattCharacteristic, payload: ByteArray, context: Context)
     {
         val writeType = when
         {
@@ -151,80 +149,6 @@ object ConnectionManager
         }
     }
     
-    fun MCU_Write(device: BluetoothDevice, characteristic: BluetoothGattCharacteristic, payload: ByteArray, context: Context)
-    {
-        val writeType = when
-        {
-            characteristic.isWritable() -> BluetoothGattCharacteristic.WRITE_TYPE_DEFAULT
-            characteristic.isWritableWithoutResponse() ->
-            {
-                BluetoothGattCharacteristic.WRITE_TYPE_NO_RESPONSE
-            }
-            
-            else ->
-            {
-                Timber.e("Characteristic ${characteristic.uuid} cannot be written to")
-                return
-            }
-        }
-        if(device.isConnected())
-        {
-//            var modifiedPayload = byteArrayOf(0x11) + payload
-            
-            val length: Int =
-                ((payload[0].toInt() shr 4) and 0xF) * 16 * 16 + (payload[0].toInt() and 0x0F) * 16 + (payload[1].toInt()) * 1
-            Timber.e(length.toString())
-            val data = ByteArray(length) { i -> (i).toByte() }
-            enqueueOperation(CharacteristicWrite(device, characteristic.uuid, writeType, data), context)
-            enqueueOperation(CharacteristicRead(device, characteristic.uuid), context)
-            
-            // wait 1 second
-//            CoroutineScope(Dispatchers.Main).launch {
-//                delay(1000)
-//                modifiedPayload = byteArrayOf(0x22) + payload
-//                enqueueOperation(CharacteristicWrite(device, characteristic.uuid, writeType, modifiedPayload))
-//            }
-        }
-        else
-        {
-            Timber.e("Not connected to ${device.address}, cannot perform characteristic write")
-        }
-    }
-    
-    fun MCU_Read(
-            device: BluetoothDevice, characteristic: BluetoothGattCharacteristic, payload: ByteArray)
-    {
-        val writeType = when
-        {
-            characteristic.isWritable() -> BluetoothGattCharacteristic.WRITE_TYPE_DEFAULT
-            characteristic.isWritableWithoutResponse() ->
-            {
-                BluetoothGattCharacteristic.WRITE_TYPE_NO_RESPONSE
-            }
-            
-            else ->
-            {
-                Timber.e("Characteristic ${characteristic.uuid} cannot be written to")
-                return
-            }
-        }
-        if(device.isConnected())
-        {
-//            var modifiedPayload = byteArrayOf(0x22) + payload
-//            enqueueOperation(CharacteristicWrite(device, characteristic.uuid, writeType, modifiedPayload))
-            // wait 1 second
-//            CoroutineScope(Dispatchers.Main).launch {
-//                delay(1000)
-//                modifiedPayload = byteArrayOf(0x22) + payload
-//                enqueueOperation(CharacteristicWrite(device, characteristic.uuid, writeType, modifiedPayload))
-//            }
-        }
-        else
-        {
-            Timber.e("Not connected to ${device.address}, cannot perform characteristic write")
-        }
-    }
-    
     fun readDescriptor(device: BluetoothDevice, descriptor: BluetoothGattDescriptor, context: Context)
     {
         if(device.isConnected() && descriptor.isReadable())
@@ -241,8 +165,7 @@ object ConnectionManager
         }
     }
     
-    fun writeDescriptor(
-            device: BluetoothDevice, descriptor: BluetoothGattDescriptor, payload: ByteArray, context: Context)
+    fun writeDescriptor(device: BluetoothDevice, descriptor: BluetoothGattDescriptor, payload: ByteArray, context: Context)
     {
         if(device.isConnected() && (descriptor.isWritable() || descriptor.isCccd()))
         {
@@ -305,7 +228,7 @@ object ConnectionManager
     // - Beginning of PRIVATE functions
     
     @Synchronized
-    private fun enqueueOperation(operation: BleOperationType, context: Context)
+    fun enqueueOperation(operation: BleOperationType, context: Context)
     {
         operationQueue.add(operation)
         if(pendingOperation == null)
@@ -557,8 +480,7 @@ object ConnectionManager
             }
         }
         
-        override fun onCharacteristicRead(
-                gatt: BluetoothGatt, characteristic: BluetoothGattCharacteristic, status: Int)
+        override fun onCharacteristicRead(gatt: BluetoothGatt, characteristic: BluetoothGattCharacteristic, status: Int)
         {
             with(characteristic) {
                 when(status)
@@ -567,8 +489,7 @@ object ConnectionManager
                     {
                         Timber.i("Read characteristic $uuid | value: ${value.toHexString()}")
                         listeners.forEach {
-                            it.get()?.onCharacteristicRead?.invoke(
-                                gatt.device, this)
+                            it.get()?.onCharacteristicRead?.invoke(gatt.device, this)
                         }
                     }
                     
@@ -590,8 +511,7 @@ object ConnectionManager
             }
         }
         
-        override fun onCharacteristicWrite(
-                gatt: BluetoothGatt, characteristic: BluetoothGattCharacteristic, status: Int)
+        override fun onCharacteristicWrite(gatt: BluetoothGatt, characteristic: BluetoothGattCharacteristic, status: Int)
         {
             with(characteristic) {
                 when(status)
@@ -600,8 +520,7 @@ object ConnectionManager
                     {
                         Timber.i("Wrote to characteristic $uuid | value: ${value.toHexString()}")
                         listeners.forEach {
-                            it.get()?.onCharacteristicWrite?.invoke(
-                                gatt.device, this)
+                            it.get()?.onCharacteristicWrite?.invoke(gatt.device, this)
                         }
                     }
                     
@@ -623,8 +542,7 @@ object ConnectionManager
             }
         }
         
-        override fun onCharacteristicChanged(
-                gatt: BluetoothGatt, characteristic: BluetoothGattCharacteristic)
+        override fun onCharacteristicChanged(gatt: BluetoothGatt, characteristic: BluetoothGattCharacteristic)
         {
             with(characteristic) {
                 Timber.i("Characteristic $uuid changed | value: ${value.toHexString()}")
@@ -632,8 +550,7 @@ object ConnectionManager
             }
         }
         
-        override fun onDescriptorRead(
-                gatt: BluetoothGatt, descriptor: BluetoothGattDescriptor, status: Int)
+        override fun onDescriptorRead(gatt: BluetoothGatt, descriptor: BluetoothGattDescriptor, status: Int)
         {
             with(descriptor) {
                 when(status)
@@ -662,8 +579,7 @@ object ConnectionManager
             }
         }
         
-        override fun onDescriptorWrite(
-                gatt: BluetoothGatt, descriptor: BluetoothGattDescriptor, status: Int)
+        override fun onDescriptorWrite(gatt: BluetoothGatt, descriptor: BluetoothGattDescriptor, status: Int)
         {
             with(descriptor) {
                 when(status)
@@ -679,8 +595,7 @@ object ConnectionManager
                         else
                         {
                             listeners.forEach {
-                                it.get()?.onDescriptorWrite?.invoke(
-                                    gatt.device, this)
+                                it.get()?.onDescriptorWrite?.invoke(gatt.device, this)
                             }
                         }
                     }
@@ -707,15 +622,11 @@ object ConnectionManager
             }
         }
         
-        private fun onCccdWrite(
-                gatt: BluetoothGatt, value: ByteArray, characteristic: BluetoothGattCharacteristic)
+        private fun onCccdWrite(gatt: BluetoothGatt, value: ByteArray, characteristic: BluetoothGattCharacteristic)
         {
             val charUuid = characteristic.uuid
-            val notificationsEnabled =
-                value.contentEquals(BluetoothGattDescriptor.ENABLE_NOTIFICATION_VALUE) || value.contentEquals(
-                    BluetoothGattDescriptor.ENABLE_INDICATION_VALUE)
-            val notificationsDisabled =
-                value.contentEquals(BluetoothGattDescriptor.DISABLE_NOTIFICATION_VALUE)
+            val notificationsEnabled = value.contentEquals(BluetoothGattDescriptor.ENABLE_NOTIFICATION_VALUE) || value.contentEquals(BluetoothGattDescriptor.ENABLE_INDICATION_VALUE)
+            val notificationsDisabled = value.contentEquals(BluetoothGattDescriptor.DISABLE_NOTIFICATION_VALUE)
             
             when
             {
@@ -723,8 +634,7 @@ object ConnectionManager
                 {
                     Timber.w("Notifications or indications ENABLED on $charUuid")
                     listeners.forEach {
-                        it.get()?.onNotificationsEnabled?.invoke(
-                            gatt.device, characteristic)
+                        it.get()?.onNotificationsEnabled?.invoke(gatt.device, characteristic)
                     }
                 }
                 
@@ -732,8 +642,7 @@ object ConnectionManager
                 {
                     Timber.w("Notifications or indications DISABLED on $charUuid")
                     listeners.forEach {
-                        it.get()?.onNotificationsDisabled?.invoke(
-                            gatt.device, characteristic)
+                        it.get()?.onNotificationsDisabled?.invoke(gatt.device, characteristic)
                     }
                 }
                 
@@ -749,8 +658,7 @@ object ConnectionManager
     fun setCallbackContext(ctx: Context)
     {
         callback.setContext(ctx)
-    }
-    /*
+    }/*
     private val broadcastReceiver = object : BroadcastReceiver()
     {
         override fun onReceive(context: Context, intent: Intent)
@@ -800,5 +708,5 @@ object ConnectionManager
     
      */
     
-    private fun BluetoothDevice.isConnected() = deviceGattMap.containsKey(this)
+    fun BluetoothDevice.isConnected() = deviceGattMap.containsKey(this)
 }

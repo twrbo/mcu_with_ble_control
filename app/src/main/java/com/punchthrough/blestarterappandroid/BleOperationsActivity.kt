@@ -106,7 +106,7 @@ class BleOperationsActivity : AppCompatActivity()
             {
                 mtu_field.text.toString().toIntOrNull()?.let { mtu ->
                     log("Requesting for MTU value of $mtu")
-                    ConnectionManager.requestMtu(device, mtu,this)
+                    ConnectionManager.requestMtu(device, mtu, this)
                 } ?: log("Invalid MTU value: ${mtu_field.text}")
             }
             else
@@ -115,7 +115,7 @@ class BleOperationsActivity : AppCompatActivity()
             }
             hideKeyboard()
         }
-    
+        
         // Transfer context in order to check permission
         ConnectionManager.setCallbackContext(this)
     }
@@ -123,7 +123,7 @@ class BleOperationsActivity : AppCompatActivity()
     override fun onDestroy()
     {
         ConnectionManager.unregisterListener(connectionEventListener)
-        ConnectionManager.teardownConnection(device,this)
+        ConnectionManager.teardownConnection(device, this)
         super.onDestroy()
     }
     
@@ -145,9 +145,7 @@ class BleOperationsActivity : AppCompatActivity()
     {
         characteristics_recycler_view.apply {
             adapter = characteristicAdapter
-            layoutManager = LinearLayoutManager(
-                this@BleOperationsActivity, RecyclerView.VERTICAL, false
-            )
+            layoutManager = LinearLayoutManager(this@BleOperationsActivity, RecyclerView.VERTICAL, false)
             isNestedScrollingEnabled = false
         }
         
@@ -172,13 +170,8 @@ class BleOperationsActivity : AppCompatActivity()
     {
         val formattedMessage = String.format("%s: %s", dateFormatter.format(Date()), message)
         runOnUiThread {
-            val currentLogText = if(log_text_view.text.isEmpty())
-            {
+            val currentLogText = log_text_view.text.ifEmpty {
                 "Beginning of log."
-            }
-            else
-            {
-                log_text_view.text
             }
             log_text_view.text = "$currentLogText\n$formattedMessage"
             log_scroll_view.post { log_scroll_view.fullScroll(View.FOCUS_DOWN) }
@@ -194,7 +187,7 @@ class BleOperationsActivity : AppCompatActivity()
                     CharacteristicProperty.Readable ->
                     {
                         log("Reading from ${characteristic.uuid}")
-                        ConnectionManager.readCharacteristic(device, characteristic,this)
+                        ConnectionManager.readCharacteristic(device, characteristic, this)
                     }
                     
                     CharacteristicProperty.Writable, CharacteristicProperty.WritableWithoutResponse ->
@@ -207,12 +200,12 @@ class BleOperationsActivity : AppCompatActivity()
                         if(notifyingCharacteristics.contains(characteristic.uuid))
                         {
                             log("Disabling notifications on ${characteristic.uuid}")
-                            ConnectionManager.disableNotifications(device, characteristic,this)
+                            ConnectionManager.disableNotifications(device, characteristic, this)
                         }
                         else
                         {
                             log("Enabling notifications on ${characteristic.uuid}")
-                            ConnectionManager.enableNotifications(device, characteristic,this)
+                            ConnectionManager.enableNotifications(device, characteristic, this)
                         }
                     }
                 }
@@ -221,7 +214,8 @@ class BleOperationsActivity : AppCompatActivity()
     }
     
     @SuppressLint("InflateParams")
-    private fun showWritePayloadDialog(characteristic: BluetoothGattCharacteristic) {
+    private fun showWritePayloadDialog(characteristic: BluetoothGattCharacteristic)
+    {
         val view = layoutInflater.inflate(R.layout.edittext_hex_payload, null)
         val hexField = view.findViewById<EditText>(R.id.editText_payload)
         val radioButtonMCURead = view.findViewById<RadioButton>(R.id.radioButton_read)
@@ -230,7 +224,7 @@ class BleOperationsActivity : AppCompatActivity()
         // 增加 radioButtonMCURead 的點選事件監聽器
         radioButtonMCURead.setOnCheckedChangeListener { _, isChecked ->
             // 根據 isChecked 決定是否顯示 editTextDataLength
-            editTextDataLength.visibility = if (isChecked) View.VISIBLE else View.GONE
+            editTextDataLength.visibility = if(isChecked) View.VISIBLE else View.GONE
         }
         
         alert("Operation") {
@@ -238,17 +232,25 @@ class BleOperationsActivity : AppCompatActivity()
             isCancelable = false
             positiveButton("Yes") {
                 with(hexField.text.toString()) {
-                    if (isNotBlank() && isNotEmpty()) {
+                    if(isNotBlank() && isNotEmpty())
+                    {
                         val bytes = hexToBytes()
                         log("Writing to ${characteristic.uuid}: ${bytes.toHexString()}")
-                        if (radioButtonMCURead.isChecked) {
+                        if(radioButtonMCURead.isChecked)
+                        {
                             editTextDataLength.visibility = View.VISIBLE
-                            ConnectionManager.MCU_Read(device, characteristic, bytes)
-                        } else {
-                            editTextDataLength.visibility = View.INVISIBLE
-                            ConnectionManager.MCU_Write(device, characteristic, bytes,this@BleOperationsActivity)
+                            McuProtocol.read(device, characteristic, bytes)
+//                            ConnectionManager.MCU_Read(device, characteristic, bytes)
                         }
-                    } else {
+                        else
+                        {
+                            editTextDataLength.visibility = View.INVISIBLE
+                            McuProtocol.write(device, characteristic, bytes, this@BleOperationsActivity)
+//                            ConnectionManager.MCU_Write(device, characteristic, bytes,this@BleOperationsActivity)
+                        }
+                    }
+                    else
+                    {
                         log("Please enter a hex payload to write to ${characteristic.uuid}")
                     }
                 }
@@ -320,15 +322,13 @@ class BleOperationsActivity : AppCompatActivity()
     
     private fun Context.hideKeyboard(view: View)
     {
-        val inputMethodManager =
-            getSystemService(Activity.INPUT_METHOD_SERVICE) as InputMethodManager
+        val inputMethodManager = getSystemService(Activity.INPUT_METHOD_SERVICE) as InputMethodManager
         inputMethodManager.hideSoftInputFromWindow(view.windowToken, 0)
     }
     
     private fun EditText.showKeyboard()
     {
-        val inputMethodManager =
-            getSystemService(Context.INPUT_METHOD_SERVICE) as InputMethodManager
+        val inputMethodManager = getSystemService(Context.INPUT_METHOD_SERVICE) as InputMethodManager
         requestFocus()
         inputMethodManager.showSoftInput(this, InputMethodManager.SHOW_IMPLICIT)
     }
