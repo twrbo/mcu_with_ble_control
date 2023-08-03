@@ -24,29 +24,19 @@ import android.bluetooth.BluetoothGattCharacteristic
 import android.bluetooth.BluetoothGattDescriptor
 import android.bluetooth.BluetoothGattService
 import android.bluetooth.BluetoothProfile
-import android.content.BroadcastReceiver
 import android.content.Context
-import android.content.Intent
-import android.content.IntentFilter
 import android.os.Handler
 import android.os.Looper
-import com.google.firebase.firestore.util.Util
 import timber.log.Timber
 import java.lang.ref.WeakReference
 import java.util.UUID
 import java.util.concurrent.ConcurrentHashMap
 import java.util.concurrent.ConcurrentLinkedQueue
-import android.icu.lang.UCharacter.GraphemeClusterBreak.L
-
-import android.R.attr.name
+import android.app.Activity
 import android.content.pm.PackageManager
-import android.icu.lang.UCharacter.GraphemeClusterBreak
-import android.util.Log
 import androidx.core.app.ActivityCompat
-import kotlinx.coroutines.CoroutineScope
-import kotlinx.coroutines.Dispatchers
-import kotlinx.coroutines.delay
-import kotlinx.coroutines.launch
+import com.punchthrough.blestarterappandroid.BLUETOOTH_CONNECT_PERMISSION_REQUEST_CODE
+import com.punchthrough.blestarterappandroid.BLUETOOTH_SCAN_PERMISSION_REQUEST_CODE
 
 
 private const val GATT_MIN_MTU_SIZE = 23
@@ -65,13 +55,6 @@ object ConnectionManager
     
     fun servicesOnDevice(device: BluetoothDevice): List<BluetoothGattService>? =
         deviceGattMap[device]?.services
-    
-    fun listenToBondStateChanges(context: Context)
-    {
-        context.applicationContext.registerReceiver(
-            broadcastReceiver, IntentFilter(BluetoothDevice.ACTION_BOND_STATE_CHANGED)
-        )
-    }
     
     fun registerListener(listener: ConnectionEventListener)
     {
@@ -108,15 +91,15 @@ object ConnectionManager
         }
         else
         {
-            enqueueOperation(Connect(device, context.applicationContext))
+            enqueueOperation(Connect(device, context.applicationContext), context)
         }
     }
     
-    fun teardownConnection(device: BluetoothDevice)
+    fun teardownConnection(device: BluetoothDevice, context: Context)
     {
         if(device.isConnected())
         {
-            enqueueOperation(Disconnect(device))
+            enqueueOperation(Disconnect(device), context)
         }
         else
         {
@@ -124,11 +107,11 @@ object ConnectionManager
         }
     }
     
-    fun readCharacteristic(device: BluetoothDevice, characteristic: BluetoothGattCharacteristic)
+    fun readCharacteristic(device: BluetoothDevice, characteristic: BluetoothGattCharacteristic, context: Context)
     {
         if(device.isConnected() && characteristic.isReadable())
         {
-            enqueueOperation(CharacteristicRead(device, characteristic.uuid))
+            enqueueOperation(CharacteristicRead(device, characteristic.uuid), context)
         }
         else if(!characteristic.isReadable())
         {
@@ -140,30 +123,35 @@ object ConnectionManager
         }
     }
     
+    
     fun writeCharacteristic(
-            device: BluetoothDevice,
-            characteristic: BluetoothGattCharacteristic,
-            payload: ByteArray
-    ) {
-        val writeType = when {
+            device: BluetoothDevice, characteristic: BluetoothGattCharacteristic, payload: ByteArray, context: Context)
+    {
+        val writeType = when
+        {
             characteristic.isWritable() -> BluetoothGattCharacteristic.WRITE_TYPE_DEFAULT
-            characteristic.isWritableWithoutResponse() -> {
+            characteristic.isWritableWithoutResponse() ->
+            {
                 BluetoothGattCharacteristic.WRITE_TYPE_NO_RESPONSE
             }
-            else -> {
+            
+            else ->
+            {
                 Timber.e("Characteristic ${characteristic.uuid} cannot be written to")
                 return
             }
         }
-        if (device.isConnected()) {
-            enqueueOperation(CharacteristicWrite(device, characteristic.uuid, writeType, payload))
-        } else {
+        if(device.isConnected())
+        {
+            enqueueOperation(CharacteristicWrite(device, characteristic.uuid, writeType, payload), context)
+        }
+        else
+        {
             Timber.e("Not connected to ${device.address}, cannot perform characteristic write")
         }
     }
     
-    fun MCU_Write(
-            device: BluetoothDevice, characteristic: BluetoothGattCharacteristic, payload: ByteArray)
+    fun MCU_Write(device: BluetoothDevice, characteristic: BluetoothGattCharacteristic, payload: ByteArray, context: Context)
     {
         val writeType = when
         {
@@ -185,10 +173,10 @@ object ConnectionManager
             
             val length: Int =
                 ((payload[0].toInt() shr 4) and 0xF) * 16 * 16 + (payload[0].toInt() and 0x0F) * 16 + (payload[1].toInt()) * 1
-            Log.e("ValueL", length.toString());
+            Timber.e(length.toString())
             val data = ByteArray(length) { i -> (i).toByte() }
-            enqueueOperation(CharacteristicWrite(device, characteristic.uuid, writeType, data))
-            enqueueOperation(CharacteristicRead(device, characteristic.uuid))
+            enqueueOperation(CharacteristicWrite(device, characteristic.uuid, writeType, data), context)
+            enqueueOperation(CharacteristicRead(device, characteristic.uuid), context)
             
             // wait 1 second
 //            CoroutineScope(Dispatchers.Main).launch {
@@ -237,11 +225,11 @@ object ConnectionManager
         }
     }
     
-    fun readDescriptor(device: BluetoothDevice, descriptor: BluetoothGattDescriptor)
+    fun readDescriptor(device: BluetoothDevice, descriptor: BluetoothGattDescriptor, context: Context)
     {
         if(device.isConnected() && descriptor.isReadable())
         {
-            enqueueOperation(DescriptorRead(device, descriptor.uuid))
+            enqueueOperation(DescriptorRead(device, descriptor.uuid), context)
         }
         else if(!descriptor.isReadable())
         {
@@ -254,11 +242,11 @@ object ConnectionManager
     }
     
     fun writeDescriptor(
-            device: BluetoothDevice, descriptor: BluetoothGattDescriptor, payload: ByteArray)
+            device: BluetoothDevice, descriptor: BluetoothGattDescriptor, payload: ByteArray, context: Context)
     {
         if(device.isConnected() && (descriptor.isWritable() || descriptor.isCccd()))
         {
-            enqueueOperation(DescriptorWrite(device, descriptor.uuid, payload))
+            enqueueOperation(DescriptorWrite(device, descriptor.uuid, payload), context)
         }
         else if(!device.isConnected())
         {
@@ -270,11 +258,11 @@ object ConnectionManager
         }
     }
     
-    fun enableNotifications(device: BluetoothDevice, characteristic: BluetoothGattCharacteristic)
+    fun enableNotifications(device: BluetoothDevice, characteristic: BluetoothGattCharacteristic, context: Context)
     {
         if(device.isConnected() && (characteristic.isIndicatable() || characteristic.isNotifiable()))
         {
-            enqueueOperation(EnableNotifications(device, characteristic.uuid))
+            enqueueOperation(EnableNotifications(device, characteristic.uuid), context)
         }
         else if(!device.isConnected())
         {
@@ -286,11 +274,11 @@ object ConnectionManager
         }
     }
     
-    fun disableNotifications(device: BluetoothDevice, characteristic: BluetoothGattCharacteristic)
+    fun disableNotifications(device: BluetoothDevice, characteristic: BluetoothGattCharacteristic, context: Context)
     {
         if(device.isConnected() && (characteristic.isIndicatable() || characteristic.isNotifiable()))
         {
-            enqueueOperation(DisableNotifications(device, characteristic.uuid))
+            enqueueOperation(DisableNotifications(device, characteristic.uuid), context)
         }
         else if(!device.isConnected())
         {
@@ -302,11 +290,11 @@ object ConnectionManager
         }
     }
     
-    fun requestMtu(device: BluetoothDevice, mtu: Int)
+    fun requestMtu(device: BluetoothDevice, mtu: Int, context: Context)
     {
         if(device.isConnected())
         {
-            enqueueOperation(MtuRequest(device, mtu.coerceIn(GATT_MIN_MTU_SIZE, GATT_MAX_MTU_SIZE)))
+            enqueueOperation(MtuRequest(device, mtu.coerceIn(GATT_MIN_MTU_SIZE, GATT_MAX_MTU_SIZE)), context)
         }
         else
         {
@@ -317,23 +305,23 @@ object ConnectionManager
     // - Beginning of PRIVATE functions
     
     @Synchronized
-    private fun enqueueOperation(operation: BleOperationType)
+    private fun enqueueOperation(operation: BleOperationType, context: Context)
     {
         operationQueue.add(operation)
         if(pendingOperation == null)
         {
-            doNextOperation()
+            doNextOperation(context)
         }
     }
     
     @Synchronized
-    private fun signalEndOfOperation()
+    private fun signalEndOfOperation(context: Context)
     {
         Timber.d("End of $pendingOperation")
         pendingOperation = null
         if(operationQueue.isNotEmpty())
         {
-            doNextOperation()
+            doNextOperation(context)
         }
     }
     
@@ -342,8 +330,15 @@ object ConnectionManager
      * can be enqueued by [enqueueOperation].
      */
     @Synchronized
-    private fun doNextOperation()
+    private fun doNextOperation(context: Context)
     {
+        
+        if(ActivityCompat.checkSelfPermission(context, Manifest.permission.BLUETOOTH_SCAN) != PackageManager.PERMISSION_GRANTED)
+        {
+            ActivityCompat.requestPermissions(context as Activity, arrayOf(Manifest.permission.BLUETOOTH_SCAN), BLUETOOTH_SCAN_PERMISSION_REQUEST_CODE)
+            return
+        }
+        
         if(pendingOperation != null)
         {
             Timber.e("doNextOperation() called when an operation is pending! Aborting.")
@@ -369,7 +364,7 @@ object ConnectionManager
         // Check BluetoothGatt availability for other operations
         val gatt = deviceGattMap[operation.device] ?: this@ConnectionManager.run {
             Timber.e("Not connected to ${operation.device.address}! Aborting $operation operation.")
-            signalEndOfOperation()
+            signalEndOfOperation(context)
             return
         }
         
@@ -382,7 +377,7 @@ object ConnectionManager
                 gatt.close()
                 deviceGattMap.remove(device)
                 listeners.forEach { it.get()?.onDisconnect?.invoke(device) }
-                signalEndOfOperation()
+                signalEndOfOperation(context)
             }
             
             is CharacteristicWrite -> with(operation) {
@@ -392,7 +387,7 @@ object ConnectionManager
                     gatt.writeCharacteristic(characteristic)
                 } ?: this@ConnectionManager.run {
                     Timber.e("Cannot find $characteristicUuid to write to")
-                    signalEndOfOperation()
+                    signalEndOfOperation(context)
                 }
             }
             
@@ -401,7 +396,7 @@ object ConnectionManager
                     gatt.readCharacteristic(characteristic)
                 } ?: this@ConnectionManager.run {
                     Timber.e("Cannot find $characteristicUuid to read from")
-                    signalEndOfOperation()
+                    signalEndOfOperation(context)
                 }
             }
             
@@ -411,7 +406,7 @@ object ConnectionManager
                     gatt.writeDescriptor(descriptor)
                 } ?: this@ConnectionManager.run {
                     Timber.e("Cannot find $descriptorUuid to write to")
-                    signalEndOfOperation()
+                    signalEndOfOperation(context)
                 }
             }
             
@@ -420,7 +415,7 @@ object ConnectionManager
                     gatt.readDescriptor(descriptor)
                 } ?: this@ConnectionManager.run {
                     Timber.e("Cannot find $descriptorUuid to read from")
-                    signalEndOfOperation()
+                    signalEndOfOperation(context)
                 }
             }
             
@@ -438,7 +433,7 @@ object ConnectionManager
                         if(!gatt.setCharacteristicNotification(characteristic, true))
                         {
                             Timber.e("setCharacteristicNotification failed for ${characteristic.uuid}")
-                            signalEndOfOperation()
+                            signalEndOfOperation(context)
                             return
                         }
                         
@@ -446,11 +441,11 @@ object ConnectionManager
                         gatt.writeDescriptor(cccDescriptor)
                     } ?: this@ConnectionManager.run {
                         Timber.e("${characteristic.uuid} doesn't contain the CCC descriptor!")
-                        signalEndOfOperation()
+                        signalEndOfOperation(context)
                     }
                 } ?: this@ConnectionManager.run {
                     Timber.e("Cannot find $characteristicUuid! Failed to enable notifications.")
-                    signalEndOfOperation()
+                    signalEndOfOperation(context)
                 }
             }
             
@@ -461,7 +456,7 @@ object ConnectionManager
                         if(!gatt.setCharacteristicNotification(characteristic, false))
                         {
                             Timber.e("setCharacteristicNotification failed for ${characteristic.uuid}")
-                            signalEndOfOperation()
+                            signalEndOfOperation(context)
                             return
                         }
                         
@@ -469,11 +464,11 @@ object ConnectionManager
                         gatt.writeDescriptor(cccDescriptor)
                     } ?: this@ConnectionManager.run {
                         Timber.e("${characteristic.uuid} doesn't contain the CCC descriptor!")
-                        signalEndOfOperation()
+                        signalEndOfOperation(context)
                     }
                 } ?: this@ConnectionManager.run {
                     Timber.e("Cannot find $characteristicUuid! Failed to disable notifications.")
-                    signalEndOfOperation()
+                    signalEndOfOperation(context)
                 }
             }
             
@@ -485,6 +480,14 @@ object ConnectionManager
     
     private val callback = object : BluetoothGattCallback()
     {
+        private lateinit var context: Context // 宣告一個 Context 變數
+        
+        // 設定 context 的方法
+        fun setContext(ctx: Context)
+        {
+            context = ctx
+        }
+        
         override fun onConnectionStateChange(gatt: BluetoothGatt, status: Int, newState: Int)
         {
             val deviceAddress = gatt.device.address
@@ -496,13 +499,17 @@ object ConnectionManager
                     Timber.w("onConnectionStateChange: connected to $deviceAddress")
                     deviceGattMap[gatt.device] = gatt
                     Handler(Looper.getMainLooper()).post {
+                        if(ActivityCompat.checkSelfPermission(context, Manifest.permission.BLUETOOTH_CONNECT) != PackageManager.PERMISSION_GRANTED)
+                        {
+                            ActivityCompat.requestPermissions(context as Activity, arrayOf(Manifest.permission.BLUETOOTH_CONNECT), BLUETOOTH_CONNECT_PERMISSION_REQUEST_CODE)
+                        }
                         gatt.discoverServices()
                     }
                 }
                 else if(newState == BluetoothProfile.STATE_DISCONNECTED)
                 {
                     Timber.e("onConnectionStateChange: disconnected from $deviceAddress")
-                    teardownConnection(gatt.device)
+                    teardownConnection(gatt.device, context)
                 }
             }
             else
@@ -510,9 +517,9 @@ object ConnectionManager
                 Timber.e("onConnectionStateChange: status $status encountered for $deviceAddress!")
                 if(pendingOperation is Connect)
                 {
-                    signalEndOfOperation()
+                    signalEndOfOperation(context)
                 }
-                teardownConnection(gatt.device)
+                teardownConnection(gatt.device, context)
             }
         }
         
@@ -523,19 +530,19 @@ object ConnectionManager
                 {
                     Timber.w("Discovered ${services.size} services for ${device.address}.")
                     printGattTable()
-                    requestMtu(device, GATT_MAX_MTU_SIZE)
+                    requestMtu(device, GATT_MAX_MTU_SIZE, context)
                     listeners.forEach { it.get()?.onConnectionSetupComplete?.invoke(this) }
                 }
                 else
                 {
                     Timber.e("Service discovery failed due to status $status")
-                    teardownConnection(gatt.device)
+                    teardownConnection(gatt.device, context)
                 }
             }
             
             if(pendingOperation is Connect)
             {
-                signalEndOfOperation()
+                signalEndOfOperation(context)
             }
         }
         
@@ -546,7 +553,7 @@ object ConnectionManager
             
             if(pendingOperation is MtuRequest)
             {
-                signalEndOfOperation()
+                signalEndOfOperation(context)
             }
         }
         
@@ -561,8 +568,7 @@ object ConnectionManager
                         Timber.i("Read characteristic $uuid | value: ${value.toHexString()}")
                         listeners.forEach {
                             it.get()?.onCharacteristicRead?.invoke(
-                                gatt.device, this
-                            )
+                                gatt.device, this)
                         }
                     }
                     
@@ -580,7 +586,7 @@ object ConnectionManager
             
             if(pendingOperation is CharacteristicRead)
             {
-                signalEndOfOperation()
+                signalEndOfOperation(context)
             }
         }
         
@@ -595,8 +601,7 @@ object ConnectionManager
                         Timber.i("Wrote to characteristic $uuid | value: ${value.toHexString()}")
                         listeners.forEach {
                             it.get()?.onCharacteristicWrite?.invoke(
-                                gatt.device, this
-                            )
+                                gatt.device, this)
                         }
                     }
                     
@@ -614,7 +619,7 @@ object ConnectionManager
             
             if(pendingOperation is CharacteristicWrite)
             {
-                signalEndOfOperation()
+                signalEndOfOperation(context)
             }
         }
         
@@ -653,7 +658,7 @@ object ConnectionManager
             
             if(pendingOperation is DescriptorRead)
             {
-                signalEndOfOperation()
+                signalEndOfOperation(context)
             }
         }
         
@@ -675,8 +680,7 @@ object ConnectionManager
                         {
                             listeners.forEach {
                                 it.get()?.onDescriptorWrite?.invoke(
-                                    gatt.device, this
-                                )
+                                    gatt.device, this)
                             }
                         }
                     }
@@ -695,11 +699,11 @@ object ConnectionManager
             
             if(descriptor.isCccd() && (pendingOperation is EnableNotifications || pendingOperation is DisableNotifications))
             {
-                signalEndOfOperation()
+                signalEndOfOperation(context)
             }
             else if(!descriptor.isCccd() && pendingOperation is DescriptorWrite)
             {
-                signalEndOfOperation()
+                signalEndOfOperation(context)
             }
         }
         
@@ -709,8 +713,7 @@ object ConnectionManager
             val charUuid = characteristic.uuid
             val notificationsEnabled =
                 value.contentEquals(BluetoothGattDescriptor.ENABLE_NOTIFICATION_VALUE) || value.contentEquals(
-                    BluetoothGattDescriptor.ENABLE_INDICATION_VALUE
-                )
+                    BluetoothGattDescriptor.ENABLE_INDICATION_VALUE)
             val notificationsDisabled =
                 value.contentEquals(BluetoothGattDescriptor.DISABLE_NOTIFICATION_VALUE)
             
@@ -721,8 +724,7 @@ object ConnectionManager
                     Timber.w("Notifications or indications ENABLED on $charUuid")
                     listeners.forEach {
                         it.get()?.onNotificationsEnabled?.invoke(
-                            gatt.device, characteristic
-                        )
+                            gatt.device, characteristic)
                     }
                 }
                 
@@ -731,8 +733,7 @@ object ConnectionManager
                     Timber.w("Notifications or indications DISABLED on $charUuid")
                     listeners.forEach {
                         it.get()?.onNotificationsDisabled?.invoke(
-                            gatt.device, characteristic
-                        )
+                            gatt.device, characteristic)
                     }
                 }
                 
@@ -745,6 +746,11 @@ object ConnectionManager
         
     }
     
+    fun setCallbackContext(ctx: Context)
+    {
+        callback.setContext(ctx)
+    }
+    /*
     private val broadcastReceiver = object : BroadcastReceiver()
     {
         override fun onReceive(context: Context, intent: Intent)
@@ -761,23 +767,25 @@ object ConnectionManager
                     Timber.w("${device?.address} bond state changed | $bondTransition")
                 }
                 
-                // Test for changing pairing method
-                if(BluetoothDevice.ACTION_PAIRING_REQUEST == intent.action)
-                {
-                    val device: BluetoothDevice =
-                        intent.getParcelableExtra(BluetoothDevice.EXTRA_DEVICE)!!
-                    val type = intent.getIntExtra(
-                        BluetoothDevice.EXTRA_PAIRING_VARIANT, BluetoothDevice.ERROR
-                    )
-                    if(type == BluetoothDevice.PAIRING_VARIANT_PIN)
+                /*
+                    // Test for changing pairing method
+                    if(BluetoothDevice.ACTION_PAIRING_REQUEST == intent.action)
                     {
-                        val b = 0
+                        val device: BluetoothDevice =
+                            intent.getParcelableExtra(BluetoothDevice.EXTRA_DEVICE)!!
+                        val type = intent.getIntExtra(
+                            BluetoothDevice.EXTRA_PAIRING_VARIANT, BluetoothDevice.ERROR)
+                        if(type == BluetoothDevice.PAIRING_VARIANT_PIN)
+                        {
+                            val b = 0
+                        }
+                        else
+                        {
+                            val a = 0
+                        }
                     }
-                    else
-                    {
-                        val a = 0
-                    }
-                }
+                    
+                */
             }
         }
         
@@ -789,6 +797,8 @@ object ConnectionManager
             else -> "ERROR: $this"
         }
     }
+    
+     */
     
     private fun BluetoothDevice.isConnected() = deviceGattMap.containsKey(this)
 }

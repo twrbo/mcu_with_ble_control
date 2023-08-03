@@ -17,6 +17,7 @@
 package com.punchthrough.blestarterappandroid
 
 import android.Manifest
+import android.annotation.SuppressLint
 import android.app.Activity
 import android.bluetooth.BluetoothAdapter
 import android.bluetooth.BluetoothDevice
@@ -44,8 +45,8 @@ import kotlinx.android.synthetic.main.activity_main.searchView
 import org.jetbrains.anko.alert
 import timber.log.Timber
 
-public const val BLUETOOTH_SCAN_PERMISSION_REQUEST_CODE = 3
-public const val BLUETOOTH_CONNECT_PERMISSION_REQUEST_CODE = 4
+const val BLUETOOTH_SCAN_PERMISSION_REQUEST_CODE = 3
+const val BLUETOOTH_CONNECT_PERMISSION_REQUEST_CODE = 4
 
 class MainActivity : AppCompatActivity()
 {
@@ -142,6 +143,8 @@ class MainActivity : AppCompatActivity()
             }
         }
         
+        // Transfer context in order to check permission
+        ConnectionManager.setCallbackContext(this)
     }
     
     
@@ -153,6 +156,9 @@ class MainActivity : AppCompatActivity()
         {
             promptEnableBluetooth()
         }
+    
+        // Transfer context in order to check permission
+        ConnectionManager.setCallbackContext(this)
     }
     
     private val enableBluetoothLauncher = registerForActivityResult(ActivityResultContracts.StartActivityForResult()) { result ->
@@ -173,6 +179,7 @@ class MainActivity : AppCompatActivity()
         }
     }
     
+    @SuppressLint("NotifyDataSetChanged")
     private fun startBleScan()
     {
         scanResults.clear()

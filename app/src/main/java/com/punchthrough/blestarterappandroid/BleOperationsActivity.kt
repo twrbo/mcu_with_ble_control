@@ -106,7 +106,7 @@ class BleOperationsActivity : AppCompatActivity()
             {
                 mtu_field.text.toString().toIntOrNull()?.let { mtu ->
                     log("Requesting for MTU value of $mtu")
-                    ConnectionManager.requestMtu(device, mtu)
+                    ConnectionManager.requestMtu(device, mtu,this)
                 } ?: log("Invalid MTU value: ${mtu_field.text}")
             }
             else
@@ -115,12 +115,15 @@ class BleOperationsActivity : AppCompatActivity()
             }
             hideKeyboard()
         }
+    
+        // Transfer context in order to check permission
+        ConnectionManager.setCallbackContext(this)
     }
     
     override fun onDestroy()
     {
         ConnectionManager.unregisterListener(connectionEventListener)
-        ConnectionManager.teardownConnection(device)
+        ConnectionManager.teardownConnection(device,this)
         super.onDestroy()
     }
     
@@ -191,7 +194,7 @@ class BleOperationsActivity : AppCompatActivity()
                     CharacteristicProperty.Readable ->
                     {
                         log("Reading from ${characteristic.uuid}")
-                        ConnectionManager.readCharacteristic(device, characteristic)
+                        ConnectionManager.readCharacteristic(device, characteristic,this)
                     }
                     
                     CharacteristicProperty.Writable, CharacteristicProperty.WritableWithoutResponse ->
@@ -204,12 +207,12 @@ class BleOperationsActivity : AppCompatActivity()
                         if(notifyingCharacteristics.contains(characteristic.uuid))
                         {
                             log("Disabling notifications on ${characteristic.uuid}")
-                            ConnectionManager.disableNotifications(device, characteristic)
+                            ConnectionManager.disableNotifications(device, characteristic,this)
                         }
                         else
                         {
                             log("Enabling notifications on ${characteristic.uuid}")
-                            ConnectionManager.enableNotifications(device, characteristic)
+                            ConnectionManager.enableNotifications(device, characteristic,this)
                         }
                     }
                 }
@@ -243,7 +246,7 @@ class BleOperationsActivity : AppCompatActivity()
                             ConnectionManager.MCU_Read(device, characteristic, bytes)
                         } else {
                             editTextDataLength.visibility = View.INVISIBLE
-                            ConnectionManager.MCU_Write(device, characteristic, bytes)
+                            ConnectionManager.MCU_Write(device, characteristic, bytes,this@BleOperationsActivity)
                         }
                     } else {
                         log("Please enter a hex payload to write to ${characteristic.uuid}")
