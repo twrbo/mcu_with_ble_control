@@ -22,18 +22,29 @@ import android.content.Context
 import com.google.firestore.v1.Write
 import com.punchthrough.blestarterappandroid.ble.CharacteristicRead
 import com.punchthrough.blestarterappandroid.ble.CharacteristicWrite
+import com.punchthrough.blestarterappandroid.ble.ConnectionEventListener
 import com.punchthrough.blestarterappandroid.ble.ConnectionManager
 import com.punchthrough.blestarterappandroid.ble.ConnectionManager.isConnected
+import com.punchthrough.blestarterappandroid.ble.DescriptorRead
+import com.punchthrough.blestarterappandroid.ble.EnableNotifications
 import com.punchthrough.blestarterappandroid.ble.isWritable
 import com.punchthrough.blestarterappandroid.ble.isWritableWithoutResponse
+import kotlinx.coroutines.CoroutineScope
+import kotlinx.coroutines.Dispatchers
+import kotlinx.coroutines.delay
+import kotlinx.coroutines.launch
 import timber.log.Timber
+import java.lang.Integer.min
+import kotlin.experimental.and
+import kotlin.experimental.or
+import kotlin.math.log
 
 object McuProtocol
 {
     private const val MAX_PACKET_SIZE: Int = 64             // USB2.0 full speed max packet size
-    private const val deviceRxBufferSize: Short = 64        // device rx buffer size
-    private const val deviceTxBufferSize: Short = 64        // device tx buffer size
-    private const val deviceDataBufferSize: Short = 512     // device data buffer size
+    private const val deviceRxBufferSize: Int = 64        // device rx buffer size
+    private const val deviceTxBufferSize: Int = 64        // device tx buffer size
+    private const val deviceDataBufferSize: Int = 512     // device data buffer size
     
     // Control byte definition //
     private const val MCU_START: Byte = 0x01                // Control byte - Start
@@ -45,12 +56,17 @@ object McuProtocol
     
     // Error code definition //
     // MCU state
-    private const val MCU_STATE_OK: Short = 0x0000          // MCU OK
-    private const val MCU_STATE_BUSY: Short = 0x0001        // MCU busy
-    private const val MCU_STATE_CMD_ERROR: Short = 0x0010   // MCU CMD Error
+    private const val MCU_STATE_OK: Byte = 0x0000          // MCU OK
+    private const val MCU_STATE_BUSY: Byte = 0x0001        // MCU busy
+    private const val MCU_STATE_CMD_ERROR: Byte = 0x0010   // MCU CMD Error
     
-    // BLE State
-    private const val BLE_PendingUpdate = 0x1000
+    
+    private var dataLength = 0
+
+//    var readBuffer: ArrayList<Byte> = ArrayList<Byte>(List(1) { 0 })
+    
+    var readBuffer: ArrayList<Byte> = ArrayList()
+    var isTrigger: Boolean = false
     
     
     fun write(device: BluetoothDevice, characteristic: BluetoothGattCharacteristic, payload: ByteArray, context: Context)
@@ -71,20 +87,21 @@ object McuProtocol
         }
         if(device.isConnected())
         {
-            //            var modifiedPayload = byteArrayOf(0x11) + payload
-            
-            val length: Int = ((payload[0].toInt() shr 4) and 0xF) * 16 * 16 + (payload[0].toInt() and 0x0F) * 16 + (payload[1].toInt()) * 1
-            Timber.e(length.toString())
-            val data = ByteArray(length) { i -> (i).toByte() }
-            ConnectionManager.enqueueOperation(CharacteristicWrite(device, characteristic.uuid, writeType, data), context)
-            ConnectionManager.enqueueOperation(CharacteristicRead(device, characteristic.uuid), context)
-            
-            // wait 1 second
-//            CoroutineScope(Dispatchers.Main).launch {
-//                delay(1000)
-//                modifiedPayload = byteArrayOf(0x22) + payload
-//                enqueueOperation(CharacteristicWrite(device, characteristic.uuid, writeType, modifiedPayload))
+
+// Send any length of data
+//            var length: Int = 0
+//            for(element in payload)
+//            {
+//                length = length shl 8 or (element.toInt() and 0xFF)
 //            }
+//            val data = ByteArray(length) { i -> (i).toByte() }
+            
+            
+            CoroutineScope(Dispatchers.Main).launch {
+                ConnectionManager.writeCharacteristic(device, characteristic, payload, context)
+            }
+            
+            
         }
         else
         {
@@ -92,23 +109,156 @@ object McuProtocol
         }
     }
     
-    fun read(device: BluetoothDevice, characteristic: BluetoothGattCharacteristic, payload: ByteArray)
+    fun read(device: BluetoothDevice, characteristic: BluetoothGattCharacteristic, payload: ByteArray, context: Context)
     {
-    
+        val writeType = when
+        {
+            characteristic.isWritable() -> BluetoothGattCharacteristic.WRITE_TYPE_DEFAULT
+            characteristic.isWritableWithoutResponse() ->
+            {
+                BluetoothGattCharacteristic.WRITE_TYPE_NO_RESPONSE
+            }
+            
+            else ->
+            {
+                Timber.e("Characteristic ${characteristic.uuid} cannot be written to")
+                return
+            }
+        }
+        if(device.isConnected())
+        {
+            
+            Timber.e("DataLength: $dataLength")
+            CoroutineScope(Dispatchers.Main).launch {
+                ConnectionManager.writeCharacteristic(device, characteristic, payload, context)
+                awaitEvent()
+                readBuffer[0] = MCU_STATE_OK
+                if(readBuffer[0] == MCU_STATE_OK)
+                {
+                    awaitEvent()
+                    for(i in readBuffer) Timber.e("Data:$i")
+//                    val cmd = ByteArray(5) { i -> (i).toByte() }
+//                    ConnectionManager.writeCharacteristic(device, characteristic, cmd, context)
+                }
+                
+            }
+        }
+        else
+        {
+            Timber.e("Not connected to ${device.address}, cannot perform characteristic write")
+        }
     }
     
-    private fun checkStatus()
+    fun setDataLength(length: Int)
     {
-    
+        dataLength = length
     }
     
-    private fun checkStatusEx()
+    private fun checkDeviceState(): Boolean
     {
-    
+        val inputData = ByteArray(64) { 0xFF.toByte() }
+        val outputData = ByteArray(64) { 0xFF.toByte() }
+        inputData[0] = MCU_CHECK.toByte()
+//
+//        if (!writeBuffer(inputData)) {
+//            println("[Error] [Check State] Write buffer failed !")
+//            return false
+//        }
+//
+//        if (!readBuffer(outputData)) {
+//            println("[Error] [Check State] Read buffer failed !")
+//            return false
+//        }
+//
+//        if (outputData[0] != MCU_STATE_OK.toByte()) {
+//            errorCode = outputData[0].toInt() // Update MCU error code
+//            return false
+//        }
+//
+        return true
     }
     
-    private fun createWritePacket()
+    private fun checkDeviceStateEx(): Boolean
     {
-    
+        var checkCurrentTimes = 0
+//
+//        while (checkCurrentTimes < maxCheckTimes) {
+//            if (checkDeviceState()) {
+//                return true
+//            } else if (errorCode == ERROR_USB_TIMEOUT) {
+//                println("[Warning] [Check State] Time out, times : ${++checkCurrentTimes}")
+//                // Reconnect
+//                if (autoReconnect && checkCurrentTimes < maxCheckTimes && !reconnect()) {
+//                    println("[Error] [Check State] Reconnect failed !")
+//                }
+//            } else if (errorCode == MCU_STATE_BUSY) {
+//                println("[Warning] [Check State] MCU busy, times : ${++checkCurrentTimes}")
+//                // Reconnect
+//                if (autoReconnect && checkCurrentTimes < maxCheckTimes && !reconnect()) {
+//                    println("[Error] [Check State] Reconnect failed !")
+//                }
+//            } else {
+//                println("[Error] [Check State] Unexpected error !")
+//                return false
+//            }
+//
+//            delay(checkIntervalTime) // check state interval time
+//        }
+//
+        println("[Error] [Check State] Max retries exceeded !")
+        return false
     }
+    
+    private fun createWritePackage(writeData: ByteArray): List<ByteArray>
+    {
+        val packetSize = 64 // packet size
+        val dataBufferSize = 512 // device data buffer size
+        
+        val packedData = mutableListOf<ByteArray>()
+        var dataIdx = 0
+        
+        while(dataIdx < writeData.size)
+        {
+            val remainingData = writeData.size - dataIdx
+            val packetDataLen = min(packetSize - 1, remainingData)
+            
+            val packet = ByteArray(packetSize) { 0xFF.toByte() }
+            packet[0] = MCU_WRITE.toByte()
+            
+            if(dataIdx % dataBufferSize == 0)
+            {
+                packet[0] = ((packet[0].toInt() or MCU_START.toInt()).toByte())
+            }
+            
+            if(remainingData <= dataBufferSize - dataIdx % dataBufferSize)
+            {
+                packet[0] = ((packet[0].toInt() or MCU_UPDATE.toInt()).toByte())
+            }
+            
+            writeData.copyInto(packet, 1, dataIdx, dataIdx + packetDataLen)
+            
+            dataIdx += packetDataLen
+            packedData.add(packet)
+        }
+        
+        if(packedData.isNotEmpty())
+        {
+            packedData.last()[0] = ((packedData.last()[0].toInt() or MCU_STOP.toInt()).toByte())
+        }
+        
+        return packedData
+    }
+    
+    private suspend fun awaitEvent()
+    {
+        // 等待特定事件，這裡假設你要等待 isTrigger 變為 true
+        while(!isTrigger)
+        {
+            delay(100) // 延遲 100 毫秒，然後再次檢查條件
+        }
+        isTrigger = false;
+        // 進行後續操作
+        Timber.e("isTrigger 已經為 true，可以繼續執行後續操作")
+    }
+    
 }

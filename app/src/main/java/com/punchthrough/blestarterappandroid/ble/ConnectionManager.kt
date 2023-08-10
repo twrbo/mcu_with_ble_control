@@ -37,6 +37,7 @@ import android.content.pm.PackageManager
 import androidx.core.app.ActivityCompat
 import com.punchthrough.blestarterappandroid.BLUETOOTH_CONNECT_PERMISSION_REQUEST_CODE
 import com.punchthrough.blestarterappandroid.BLUETOOTH_SCAN_PERMISSION_REQUEST_CODE
+import com.punchthrough.blestarterappandroid.McuProtocol
 
 private const val GATT_MIN_MTU_SIZE = 23
 

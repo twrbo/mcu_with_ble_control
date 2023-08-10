@@ -21,14 +21,17 @@ import android.annotation.SuppressLint
 import android.app.Activity
 import android.bluetooth.BluetoothDevice
 import android.bluetooth.BluetoothGattCharacteristic
+import android.bluetooth.BluetoothGattDescriptor
 import android.content.Context
 import android.content.pm.PackageManager
 import android.os.Bundle
+import android.util.Log
 import android.view.MenuItem
 import android.view.View
 import android.view.inputmethod.InputMethodManager
 import android.widget.EditText
 import android.widget.RadioButton
+import android.widget.Toast
 import androidx.appcompat.app.AppCompatActivity
 import androidx.core.app.ActivityCompat
 import androidx.recyclerview.widget.LinearLayoutManager
@@ -49,12 +52,21 @@ import kotlinx.android.synthetic.main.activity_ble_operations.mtu_field
 import kotlinx.android.synthetic.main.activity_ble_operations.request_mtu_button
 import kotlinx.android.synthetic.main.activity_ble_operations.tv_deviceMAC
 import kotlinx.android.synthetic.main.activity_ble_operations.tv_deviceName
+import kotlinx.coroutines.CoroutineScope
+import kotlinx.coroutines.Dispatchers
+import kotlinx.coroutines.delay
+import kotlinx.coroutines.launch
 import org.jetbrains.anko.alert
 import org.jetbrains.anko.selector
+import timber.log.Timber
 import java.text.SimpleDateFormat
 import java.util.Date
 import java.util.Locale
+import java.util.Timer
 import java.util.UUID
+import com.punchthrough.blestarterappandroid.McuProtocol
+import com.punchthrough.blestarterappandroid.ble.toArrayList
+import com.punchthrough.blestarterappandroid.ble.toShortArray
 
 class BleOperationsActivity : AppCompatActivity()
 {
@@ -217,7 +229,7 @@ class BleOperationsActivity : AppCompatActivity()
     private fun showWritePayloadDialog(characteristic: BluetoothGattCharacteristic)
     {
         val view = layoutInflater.inflate(R.layout.edittext_hex_payload, null)
-        val hexField = view.findViewById<EditText>(R.id.editText_payload)
+        val editTextPayload = view.findViewById<EditText>(R.id.editText_payload)
         val radioButtonMCURead = view.findViewById<RadioButton>(R.id.radioButton_read)
         val editTextDataLength = view.findViewById<EditText>(R.id.editText_dataLength)
         
@@ -226,27 +238,49 @@ class BleOperationsActivity : AppCompatActivity()
             // 根據 isChecked 決定是否顯示 editTextDataLength
             editTextDataLength.visibility = if(isChecked) View.VISIBLE else View.GONE
         }
+    
+        // Enable notification
+        val descriptors = characteristic.descriptors
+        var descriptorUuid: UUID? = null
+        for(descriptor in descriptors)
+        {
+            descriptorUuid = descriptor.uuid
+        }
+        var desValue: ByteArray? = null
+        desValue = characteristic.getDescriptor(descriptorUuid).value
+        if(desValue == null) ConnectionManager.enableNotifications(device, characteristic, this@BleOperationsActivity)
         
         alert("Operation") {
             customView = view
             isCancelable = false
             positiveButton("Yes") {
-                with(hexField.text.toString()) {
+                with(editTextPayload.text.toString()) {
                     if(isNotBlank() && isNotEmpty())
                     {
                         val bytes = hexToBytes()
-                        log("Writing to ${characteristic.uuid}: ${bytes.toHexString()}")
+//                        log("Writing to ${characteristic.uuid}: ${bytes.toHexString()}")
+                        
+                        
                         if(radioButtonMCURead.isChecked)
                         {
-                            editTextDataLength.visibility = View.VISIBLE
-                            McuProtocol.read(device, characteristic, bytes)
-//                            ConnectionManager.MCU_Read(device, characteristic, bytes)
+                            // Start MCU Read
+                            val dataLengthText = editTextDataLength.text.toString()
+                            if (dataLengthText.isNotBlank() && dataLengthText.isNotEmpty() ) {
+                                McuProtocol.setDataLength(dataLengthText.toInt())
+                                McuProtocol.read(device, characteristic, bytes, this@BleOperationsActivity)
+                            } else {
+                                log("Please enter the data length.")
+                            }
                         }
                         else
                         {
                             editTextDataLength.visibility = View.INVISIBLE
+                            
+                            
+                            // Start MCU Write
                             McuProtocol.write(device, characteristic, bytes, this@BleOperationsActivity)
-//                            ConnectionManager.MCU_Write(device, characteristic, bytes,this@BleOperationsActivity)
+                            
+                            
                         }
                     }
                     else
@@ -257,10 +291,10 @@ class BleOperationsActivity : AppCompatActivity()
             }
             negativeButton("No") {}
         }.show()
-        hexField.showKeyboard()
+        editTextPayload.showKeyboard()
     }
     
-    private val connectionEventListener by lazy {
+    val connectionEventListener by lazy {
         ConnectionEventListener().apply {
             onDisconnect = {
                 runOnUiThread {
@@ -274,6 +308,9 @@ class BleOperationsActivity : AppCompatActivity()
             
             onCharacteristicRead = { _, characteristic ->
                 log("Read from ${characteristic.uuid}: ${characteristic.value.toHexString()}")
+                
+                if(characteristic.value != null)
+                    McuProtocol.readBuffer = characteristic.value.toArrayList()
             }
             
             onCharacteristicWrite = { _, characteristic ->
@@ -286,6 +323,12 @@ class BleOperationsActivity : AppCompatActivity()
             
             onCharacteristicChanged = { _, characteristic ->
                 log("Value changed on ${characteristic.uuid}: ${characteristic.value.toHexString()}")
+                
+                if(characteristic.value != null)
+                {
+                    McuProtocol.readBuffer = characteristic.value.toArrayList()
+                }
+                McuProtocol.isTrigger = true
             }
             
             onNotificationsEnabled = { _, characteristic ->
