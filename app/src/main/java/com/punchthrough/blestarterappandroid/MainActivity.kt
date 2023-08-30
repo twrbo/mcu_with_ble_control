@@ -53,7 +53,6 @@ const val BLUETOOTH_CONNECT_PERMISSION_REQUEST_CODE = 4
 
 class MainActivity : AppCompatActivity()
 {
-    
     /*******************************************
      * Properties
      *******************************************/
@@ -66,8 +65,7 @@ class MainActivity : AppCompatActivity()
         bluetoothAdapter.bluetoothLeScanner
     }
     
-    private val scanSettings =
-        ScanSettings.Builder().setScanMode(ScanSettings.SCAN_MODE_LOW_LATENCY).build()
+    private val scanSettings = ScanSettings.Builder().setScanMode(ScanSettings.SCAN_MODE_LOW_LATENCY).build()
     
     private var isScanning = false
         set(value)
@@ -89,7 +87,7 @@ class MainActivity : AppCompatActivity()
             }
         }
     }
-
+    
     /*******************************************
      * Activity function overrides
      *******************************************/
@@ -146,6 +144,7 @@ class MainActivity : AppCompatActivity()
         }
         
         // Transfer context in order to check permission
+        ConnectionManager.init(this)
         ConnectionManager.setCallbackContext(this)
     }
     
@@ -158,13 +157,14 @@ class MainActivity : AppCompatActivity()
         {
             promptEnableBluetooth()
         }
-    
+        
         // Transfer context in order to check permission
         ConnectionManager.setCallbackContext(this)
     }
     
     private val enableBluetoothLauncher = registerForActivityResult(ActivityResultContracts.StartActivityForResult()) { result ->
-        if (result.resultCode != Activity.RESULT_OK) {
+        if(result.resultCode != Activity.RESULT_OK)
+        {
             promptEnableBluetooth()
         }
     }
@@ -175,7 +175,8 @@ class MainActivity : AppCompatActivity()
     
     private fun promptEnableBluetooth()
     {
-        if (!bluetoothAdapter.isEnabled) {
+        if(!bluetoothAdapter.isEnabled)
+        {
             val enableBtIntent = Intent(BluetoothAdapter.ACTION_REQUEST_ENABLE)
             enableBluetoothLauncher.launch(enableBtIntent)
         }
@@ -280,7 +281,7 @@ class MainActivity : AppCompatActivity()
     /*******************************************
      * Extension functions
      *******************************************/
-    
+
 //    private fun Context.hasPermission(permissionType: String): Boolean
 //    {
 //        return ContextCompat.checkSelfPermission(

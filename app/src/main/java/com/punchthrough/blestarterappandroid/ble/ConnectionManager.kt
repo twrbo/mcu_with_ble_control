@@ -34,10 +34,14 @@ import java.util.concurrent.ConcurrentHashMap
 import java.util.concurrent.ConcurrentLinkedQueue
 import android.app.Activity
 import android.content.pm.PackageManager
+import android.view.View
+import android.widget.ProgressBar
+import androidx.appcompat.app.AppCompatActivity
 import androidx.core.app.ActivityCompat
 import com.punchthrough.blestarterappandroid.BLUETOOTH_CONNECT_PERMISSION_REQUEST_CODE
 import com.punchthrough.blestarterappandroid.BLUETOOTH_SCAN_PERMISSION_REQUEST_CODE
 import com.punchthrough.blestarterappandroid.McuProtocol
+import com.punchthrough.blestarterappandroid.R
 
 private const val GATT_MIN_MTU_SIZE = 23
 
@@ -46,13 +50,22 @@ private const val GATT_MAX_MTU_SIZE = 517
 
 object ConnectionManager
 {
-
+    
     
     private var listeners: MutableSet<WeakReference<ConnectionEventListener>> = mutableSetOf()
     
     private val deviceGattMap = ConcurrentHashMap<BluetoothDevice, BluetoothGatt>()
     private val operationQueue = ConcurrentLinkedQueue<BleOperationType>()
     private var pendingOperation: BleOperationType? = null
+    
+    private lateinit var activity: AppCompatActivity
+    
+    
+    // 初始化方法，用於設置 BleOperationsActivity 的參考
+    fun init(activity: AppCompatActivity)
+    {
+        this.activity = activity
+    }
     
     fun servicesOnDevice(device: BluetoothDevice): List<BluetoothGattService>? =
         deviceGattMap[device]?.services
@@ -81,6 +94,11 @@ object ConnectionManager
         toRemove?.let {
             listeners.remove(it)
             Timber.d("Removed listener ${it.get()}, ${listeners.size} listeners total")
+        }
+        
+        val progressBar = activity.findViewById<ProgressBar>(R.id.progressBar)
+        activity.runOnUiThread {
+            progressBar.visibility = View.INVISIBLE
         }
     }
     
@@ -259,7 +277,6 @@ object ConnectionManager
     @Synchronized
     private fun doNextOperation(context: Context)
     {
-        
         if(ActivityCompat.checkSelfPermission(context, Manifest.permission.BLUETOOTH_SCAN) != PackageManager.PERMISSION_GRANTED)
         {
             ActivityCompat.requestPermissions(context as Activity, arrayOf(Manifest.permission.BLUETOOTH_SCAN), BLUETOOTH_SCAN_PERMISSION_REQUEST_CODE)
@@ -281,6 +298,11 @@ object ConnectionManager
         // Handle Connect separately from other operations that require device to be connected
         if(operation is Connect)
         {
+            val progressBar = activity.findViewById<ProgressBar>(R.id.progressBar)
+            activity.runOnUiThread {
+                progressBar.visibility = View.VISIBLE
+            }
+    
             with(operation) {
                 Timber.w("Connecting to ${device.address}")
                 device.connectGatt(context, false, callback)
@@ -418,7 +440,7 @@ object ConnectionManager
         override fun onConnectionStateChange(gatt: BluetoothGatt, status: Int, newState: Int)
         {
             val deviceAddress = gatt.device.address
-            
+
             if(status == BluetoothGatt.GATT_SUCCESS)
             {
                 if(newState == BluetoothProfile.STATE_CONNECTED)
