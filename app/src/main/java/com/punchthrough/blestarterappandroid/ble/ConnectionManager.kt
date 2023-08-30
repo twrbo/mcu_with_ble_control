@@ -17,6 +17,7 @@
 package com.punchthrough.blestarterappandroid.ble
 
 import android.Manifest
+import android.app.Activity
 import android.bluetooth.BluetoothDevice
 import android.bluetooth.BluetoothGatt
 import android.bluetooth.BluetoothGattCallback
@@ -25,23 +26,21 @@ import android.bluetooth.BluetoothGattDescriptor
 import android.bluetooth.BluetoothGattService
 import android.bluetooth.BluetoothProfile
 import android.content.Context
+import android.content.pm.PackageManager
 import android.os.Handler
 import android.os.Looper
-import timber.log.Timber
-import java.lang.ref.WeakReference
-import java.util.UUID
-import java.util.concurrent.ConcurrentHashMap
-import java.util.concurrent.ConcurrentLinkedQueue
-import android.app.Activity
-import android.content.pm.PackageManager
 import android.view.View
 import android.widget.ProgressBar
 import androidx.appcompat.app.AppCompatActivity
 import androidx.core.app.ActivityCompat
 import com.punchthrough.blestarterappandroid.BLUETOOTH_CONNECT_PERMISSION_REQUEST_CODE
 import com.punchthrough.blestarterappandroid.BLUETOOTH_SCAN_PERMISSION_REQUEST_CODE
-import com.punchthrough.blestarterappandroid.McuProtocol
 import com.punchthrough.blestarterappandroid.R
+import timber.log.Timber
+import java.lang.ref.WeakReference
+import java.util.UUID
+import java.util.concurrent.ConcurrentHashMap
+import java.util.concurrent.ConcurrentLinkedQueue
 
 private const val GATT_MIN_MTU_SIZE = 23
 
@@ -96,10 +95,7 @@ object ConnectionManager
             Timber.d("Removed listener ${it.get()}, ${listeners.size} listeners total")
         }
         
-        val progressBar = activity.findViewById<ProgressBar>(R.id.progressBar)
-        activity.runOnUiThread {
-            progressBar.visibility = View.INVISIBLE
-        }
+        setProgressBar(false)
     }
     
     fun connect(device: BluetoothDevice, context: Context)
@@ -298,15 +294,13 @@ object ConnectionManager
         // Handle Connect separately from other operations that require device to be connected
         if(operation is Connect)
         {
-            val progressBar = activity.findViewById<ProgressBar>(R.id.progressBar)
-            activity.runOnUiThread {
-                progressBar.visibility = View.VISIBLE
-            }
-    
+            setProgressBar(true)
+
             with(operation) {
                 Timber.w("Connecting to ${device.address}")
                 device.connectGatt(context, false, callback)
             }
+            
             return
         }
         
@@ -327,6 +321,7 @@ object ConnectionManager
                 deviceGattMap.remove(device)
                 listeners.forEach { it.get()?.onDisconnect?.invoke(device) }
                 signalEndOfOperation(context)
+                
             }
             
             is CharacteristicWrite -> with(operation) {
@@ -440,7 +435,7 @@ object ConnectionManager
         override fun onConnectionStateChange(gatt: BluetoothGatt, status: Int, newState: Int)
         {
             val deviceAddress = gatt.device.address
-
+            
             if(status == BluetoothGatt.GATT_SUCCESS)
             {
                 if(newState == BluetoothProfile.STATE_CONNECTED)
@@ -681,58 +676,20 @@ object ConnectionManager
         
     }
     
-    fun setCallbackContext(ctx: Context)
+    private fun setProgressBar(isEnabled: Boolean)
     {
-        callback.setContext(ctx)
-    }/*
-    private val broadcastReceiver = object : BroadcastReceiver()
-    {
-        override fun onReceive(context: Context, intent: Intent)
-        {
-            with(intent) {
-                if(action == BluetoothDevice.ACTION_BOND_STATE_CHANGED)
-                {
-                    val device = getParcelableExtra<BluetoothDevice>(BluetoothDevice.EXTRA_DEVICE)
-                    val previousBondState =
-                        getIntExtra(BluetoothDevice.EXTRA_PREVIOUS_BOND_STATE, -1)
-                    val bondState = getIntExtra(BluetoothDevice.EXTRA_BOND_STATE, -1)
-                    val bondTransition =
-                        "${previousBondState.toBondStateDescription()} to " + bondState.toBondStateDescription()
-                    Timber.w("${device?.address} bond state changed | $bondTransition")
-                }
-                
-                /*
-                    // Test for changing pairing method
-                    if(BluetoothDevice.ACTION_PAIRING_REQUEST == intent.action)
-                    {
-                        val device: BluetoothDevice =
-                            intent.getParcelableExtra(BluetoothDevice.EXTRA_DEVICE)!!
-                        val type = intent.getIntExtra(
-                            BluetoothDevice.EXTRA_PAIRING_VARIANT, BluetoothDevice.ERROR)
-                        if(type == BluetoothDevice.PAIRING_VARIANT_PIN)
-                        {
-                            val b = 0
-                        }
-                        else
-                        {
-                            val a = 0
-                        }
-                    }
-                    
-                */
-            }
-        }
+        val progressBar = activity.findViewById<ProgressBar>(R.id.progressBar)
         
-        private fun Int.toBondStateDescription() = when(this)
-        {
-            BluetoothDevice.BOND_BONDED -> "BONDED"
-            BluetoothDevice.BOND_BONDING -> "BONDING"
-            BluetoothDevice.BOND_NONE -> "NOT BONDED"
-            else -> "ERROR: $this"
+        activity.runOnUiThread {
+            if(isEnabled) progressBar.visibility = View.VISIBLE
+            else progressBar.visibility = View.INVISIBLE
         }
     }
     
-     */
+    fun setCallbackContext(ctx: Context)
+    {
+        callback.setContext(ctx)
+    }
     
     fun BluetoothDevice.isConnected() = deviceGattMap.containsKey(this)
 }
