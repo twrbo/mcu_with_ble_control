@@ -46,6 +46,7 @@ private const val GATT_MAX_MTU_SIZE = 517
 
 object ConnectionManager
 {
+
     
     private var listeners: MutableSet<WeakReference<ConnectionEventListener>> = mutableSetOf()
     
@@ -124,7 +125,7 @@ object ConnectionManager
     }
     
     
-    fun writeCharacteristic(device: BluetoothDevice, characteristic: BluetoothGattCharacteristic, payload: ByteArray, context: Context)
+    fun writeCharacteristic(device: BluetoothDevice, characteristic: BluetoothGattCharacteristic, context: Context, payload: ByteArray): Boolean
     {
         val writeType = when
         {
@@ -137,16 +138,18 @@ object ConnectionManager
             else ->
             {
                 Timber.e("Characteristic ${characteristic.uuid} cannot be written to")
-                return
+                return false
             }
         }
         if(device.isConnected())
         {
             enqueueOperation(CharacteristicWrite(device, characteristic.uuid, writeType, payload), context)
+            return true
         }
         else
         {
             Timber.e("Not connected to ${device.address}, cannot perform characteristic write")
+            return false
         }
     }
     
@@ -166,7 +169,7 @@ object ConnectionManager
         }
     }
     
-    fun writeDescriptor(device: BluetoothDevice, descriptor: BluetoothGattDescriptor, payload: ByteArray, context: Context)
+    fun writeDescriptor(device: BluetoothDevice, descriptor: BluetoothGattDescriptor, context: Context, payload: ByteArray)
     {
         if(device.isConnected() && (descriptor.isWritable() || descriptor.isCccd()))
         {

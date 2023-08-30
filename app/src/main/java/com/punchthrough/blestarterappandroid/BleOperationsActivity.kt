@@ -128,6 +128,9 @@ class BleOperationsActivity : AppCompatActivity()
             hideKeyboard()
         }
         
+        // Pass context
+        McuProtocol.init(this)
+        
         // Transfer context in order to check permission
         ConnectionManager.setCallbackContext(this)
     }
@@ -238,7 +241,7 @@ class BleOperationsActivity : AppCompatActivity()
             // 根據 isChecked 決定是否顯示 editTextDataLength
             editTextDataLength.visibility = if(isChecked) View.VISIBLE else View.GONE
         }
-    
+        
         // Enable notification
         val descriptors = characteristic.descriptors
         var descriptorUuid: UUID? = null
@@ -265,10 +268,15 @@ class BleOperationsActivity : AppCompatActivity()
                         {
                             // Start MCU Read
                             val dataLengthText = editTextDataLength.text.toString()
-                            if (dataLengthText.isNotBlank() && dataLengthText.isNotEmpty() ) {
+                            if(dataLengthText.isNotBlank() && dataLengthText.isNotEmpty())
+                            {
                                 McuProtocol.setDataLength(dataLengthText.toInt())
-                                McuProtocol.read(device, characteristic, bytes, this@BleOperationsActivity)
-                            } else {
+                                CoroutineScope(Dispatchers.Main).launch {
+                                    McuProtocol.read(device, characteristic, this@BleOperationsActivity, bytes)
+                                }
+                            }
+                            else
+                            {
                                 log("Please enter the data length.")
                             }
                         }
@@ -278,8 +286,9 @@ class BleOperationsActivity : AppCompatActivity()
                             
                             
                             // Start MCU Write
-                            McuProtocol.write(device, characteristic, bytes, this@BleOperationsActivity)
-                            
+                            CoroutineScope(Dispatchers.Main).launch {
+                                McuProtocol.write(device, characteristic, this@BleOperationsActivity, bytes)
+                            }
                             
                         }
                     }
@@ -292,6 +301,9 @@ class BleOperationsActivity : AppCompatActivity()
             negativeButton("No") {}
         }.show()
         editTextPayload.showKeyboard()
+        
+        if(McuProtocol.getErrorCode() != McuProtocol.MCU_STATE_OK)
+            log("The MCU state is not OK. ErrorCode: ${McuProtocol.getErrorCode()}")
     }
     
     val connectionEventListener by lazy {
@@ -308,9 +320,6 @@ class BleOperationsActivity : AppCompatActivity()
             
             onCharacteristicRead = { _, characteristic ->
                 log("Read from ${characteristic.uuid}: ${characteristic.value.toHexString()}")
-                
-                if(characteristic.value != null)
-                    McuProtocol.readBuffer = characteristic.value.toArrayList()
             }
             
             onCharacteristicWrite = { _, characteristic ->
@@ -326,9 +335,9 @@ class BleOperationsActivity : AppCompatActivity()
                 
                 if(characteristic.value != null)
                 {
-                    McuProtocol.readBuffer = characteristic.value.toArrayList()
+                    McuProtocol.setReceivedBuffer(characteristic.value.toArrayList())
+                    McuProtocol.setTrigger()
                 }
-                McuProtocol.isTrigger = true
             }
             
             onNotificationsEnabled = { _, characteristic ->
