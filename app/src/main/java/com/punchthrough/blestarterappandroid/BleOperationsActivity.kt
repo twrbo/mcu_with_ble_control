@@ -16,22 +16,21 @@
 
 package com.punchthrough.blestarterappandroid
 
+//import kotlinx.android.synthetic.main.activity_ble_operations.mtu_field
+//import kotlinx.android.synthetic.main.activity_ble_operations.request_mtu_button
 import android.Manifest
 import android.annotation.SuppressLint
 import android.app.Activity
 import android.bluetooth.BluetoothDevice
 import android.bluetooth.BluetoothGattCharacteristic
-import android.bluetooth.BluetoothGattDescriptor
 import android.content.Context
 import android.content.pm.PackageManager
 import android.os.Bundle
-import android.util.Log
 import android.view.MenuItem
 import android.view.View
 import android.view.inputmethod.InputMethodManager
 import android.widget.EditText
 import android.widget.RadioButton
-import android.widget.Toast
 import androidx.appcompat.app.AppCompatActivity
 import androidx.core.app.ActivityCompat
 import androidx.recyclerview.widget.LinearLayoutManager
@@ -44,29 +43,22 @@ import com.punchthrough.blestarterappandroid.ble.isNotifiable
 import com.punchthrough.blestarterappandroid.ble.isReadable
 import com.punchthrough.blestarterappandroid.ble.isWritable
 import com.punchthrough.blestarterappandroid.ble.isWritableWithoutResponse
+import com.punchthrough.blestarterappandroid.ble.toArrayList
 import com.punchthrough.blestarterappandroid.ble.toHexString
 import kotlinx.android.synthetic.main.activity_ble_operations.characteristics_recycler_view
 import kotlinx.android.synthetic.main.activity_ble_operations.log_scroll_view
 import kotlinx.android.synthetic.main.activity_ble_operations.log_text_view
-import kotlinx.android.synthetic.main.activity_ble_operations.mtu_field
-import kotlinx.android.synthetic.main.activity_ble_operations.request_mtu_button
 import kotlinx.android.synthetic.main.activity_ble_operations.tv_deviceMAC
 import kotlinx.android.synthetic.main.activity_ble_operations.tv_deviceName
 import kotlinx.coroutines.CoroutineScope
 import kotlinx.coroutines.Dispatchers
-import kotlinx.coroutines.delay
 import kotlinx.coroutines.launch
 import org.jetbrains.anko.alert
 import org.jetbrains.anko.selector
-import timber.log.Timber
 import java.text.SimpleDateFormat
 import java.util.Date
 import java.util.Locale
-import java.util.Timer
 import java.util.UUID
-import com.punchthrough.blestarterappandroid.McuProtocol
-import com.punchthrough.blestarterappandroid.ble.toArrayList
-import com.punchthrough.blestarterappandroid.ble.toShortArray
 
 class BleOperationsActivity : AppCompatActivity()
 {
@@ -113,20 +105,21 @@ class BleOperationsActivity : AppCompatActivity()
             title = getString(R.string.ble_playground)
         }
         setupRecyclerView()
-        request_mtu_button.setOnClickListener {
-            if(mtu_field.text.isNotEmpty() && mtu_field.text.isNotBlank())
-            {
-                mtu_field.text.toString().toIntOrNull()?.let { mtu ->
-                    log("Requesting for MTU value of $mtu")
-                    ConnectionManager.requestMtu(device, mtu, this)
-                } ?: log("Invalid MTU value: ${mtu_field.text}")
-            }
-            else
-            {
-                log("Please specify a numeric value for desired ATT MTU (23-517)")
-            }
-            hideKeyboard()
-        }
+  
+//        request_mtu_button.setOnClickListener {
+//            if(mtu_field.text.isNotEmpty() && mtu_field.text.isNotBlank())
+//            {
+//                mtu_field.text.toString().toIntOrNull()?.let { mtu ->
+//                    log("Requesting for MTU value of $mtu")
+//                    ConnectionManager.requestMtu(device, mtu, this)
+//                } ?: log("Invalid MTU value: ${mtu_field.text}")
+//            }
+//            else
+//            {
+//                log("Please specify a numeric value for desired ATT MTU (23-517)")
+//            }
+//            hideKeyboard()
+//        }
         
         // Pass context
         McuProtocol.init(this)

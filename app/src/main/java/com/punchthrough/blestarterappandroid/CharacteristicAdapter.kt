@@ -52,25 +52,20 @@ class CharacteristicAdapter(private val items: List<BluetoothGattCharacteristic>
         fun bind(characteristic: BluetoothGattCharacteristic)
         {
             
-            view.characteristic_uuid.text = characteristic.uuid.toString()
+            
+            if(characteristic.uuid == MCR_PROTOCOL_CHARACTERISTIC_UUID)
+            {
+                view.characteristic_uuid.text = "MCU Protocol"
+            }
+            else
+            {
+                view.characteristic_uuid.text = characteristic.uuid.toString()
+            }
+            
             view.characteristic_properties.text = characteristic.printProperties()
             view.setOnClickListener { onClickListener.invoke(characteristic) }
-
-//            if(view.device_name.text == ESP32_DEVICE_NAME)
-//            {
-//                if(characteristic.uuid == MCR_PROTOCOL_CHARACTERISTIC_UUID)
-//                {
-//                    view.characteristic_uuid.text = "MCU Protocol"
-//                    view.characteristic_properties.text = characteristic.printProperties()
-//                    view.setOnClickListener { onClickListener.invoke(characteristic) }
-//                }
-//            }
-//            else
-//            {
-//                view.characteristic_uuid.text = characteristic.uuid.toString()
-//                view.characteristic_properties.text = characteristic.printProperties()
-//                view.setOnClickListener { onClickListener.invoke(characteristic) }
-//            }
+            
+            
         }
     }
 }
