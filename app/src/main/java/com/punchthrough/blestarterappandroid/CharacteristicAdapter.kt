@@ -24,18 +24,14 @@ import com.punchthrough.blestarterappandroid.ble.printProperties
 import kotlinx.android.synthetic.main.row_characteristic.view.characteristic_properties
 import kotlinx.android.synthetic.main.row_characteristic.view.characteristic_uuid
 import org.jetbrains.anko.layoutInflater
+import java.util.UUID
 
-class CharacteristicAdapter(
-    private val items: List<BluetoothGattCharacteristic>,
-    private val onClickListener: ((characteristic: BluetoothGattCharacteristic) -> Unit)
-) : RecyclerView.Adapter<CharacteristicAdapter.ViewHolder>()
+class CharacteristicAdapter(private val items: List<BluetoothGattCharacteristic>, private val onClickListener: ((characteristic: BluetoothGattCharacteristic) -> Unit)) : RecyclerView.Adapter<CharacteristicAdapter.ViewHolder>()
 {
     
     override fun onCreateViewHolder(parent: ViewGroup, viewType: Int): ViewHolder
     {
-        val view = parent.context.layoutInflater.inflate(
-            R.layout.row_characteristic, parent, false
-        )
+        val view = parent.context.layoutInflater.inflate(R.layout.row_characteristic, parent, false)
         return ViewHolder(view, onClickListener)
     }
     
@@ -47,17 +43,34 @@ class CharacteristicAdapter(
         holder.bind(item)
     }
     
-    class ViewHolder(
-        private val view: View,
-        private val onClickListener: ((characteristic: BluetoothGattCharacteristic) -> Unit)
-    ) : RecyclerView.ViewHolder(view)
+    class ViewHolder(private val view: View, private val onClickListener: ((characteristic: BluetoothGattCharacteristic) -> Unit)) : RecyclerView.ViewHolder(view)
     {
+        private val MCR_PROTOCOL_SERVICE_UUID_UUID: UUID = UUID.fromString("00000000-0100-0001-0101-010101001111")
+        private val MCR_PROTOCOL_CHARACTERISTIC_UUID: UUID = UUID.fromString("00000001-0100-0001-0101-010101001111")
+        private val ESP32_DEVICE_NAME = "MyESP32"
         
         fun bind(characteristic: BluetoothGattCharacteristic)
         {
+            
             view.characteristic_uuid.text = characteristic.uuid.toString()
             view.characteristic_properties.text = characteristic.printProperties()
             view.setOnClickListener { onClickListener.invoke(characteristic) }
+
+//            if(view.device_name.text == ESP32_DEVICE_NAME)
+//            {
+//                if(characteristic.uuid == MCR_PROTOCOL_CHARACTERISTIC_UUID)
+//                {
+//                    view.characteristic_uuid.text = "MCU Protocol"
+//                    view.characteristic_properties.text = characteristic.printProperties()
+//                    view.setOnClickListener { onClickListener.invoke(characteristic) }
+//                }
+//            }
+//            else
+//            {
+//                view.characteristic_uuid.text = characteristic.uuid.toString()
+//                view.characteristic_properties.text = characteristic.printProperties()
+//                view.setOnClickListener { onClickListener.invoke(characteristic) }
+//            }
         }
     }
 }
