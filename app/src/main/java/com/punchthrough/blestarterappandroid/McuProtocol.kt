@@ -19,8 +19,6 @@ package com.punchthrough.blestarterappandroid
 import android.bluetooth.BluetoothDevice
 import android.bluetooth.BluetoothGattCharacteristic
 import android.content.Context
-import android.os.Handler
-import android.os.Looper
 import android.view.View
 import android.widget.ScrollView
 import android.widget.TextView
@@ -29,20 +27,12 @@ import com.punchthrough.blestarterappandroid.ble.ConnectionManager
 import com.punchthrough.blestarterappandroid.ble.ConnectionManager.isConnected
 import com.punchthrough.blestarterappandroid.ble.isWritable
 import com.punchthrough.blestarterappandroid.ble.isWritableWithoutResponse
-import com.punchthrough.blestarterappandroid.ble.toArrayList
-import kotlinx.android.synthetic.main.activity_ble_operations.log_scroll_view
-import kotlinx.android.synthetic.main.activity_ble_operations.log_text_view
-import kotlinx.coroutines.CoroutineScope
-import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.delay
-import kotlinx.coroutines.launch
 import timber.log.Timber
-import java.nio.ByteBuffer
 import java.text.SimpleDateFormat
 import java.util.Date
 import java.util.Locale
 import kotlin.experimental.or
-import kotlin.math.log
 
 object McuProtocol
 {
@@ -147,43 +137,42 @@ object McuProtocol
             val packetsPerTransfer = 3
             var retryTimes = 0
             
-            log("LOG is succeed")
             
-            /*
             // Check status
             if(!checkMcuStateEx(device, characteristic, context))
             {
-                println("[Error] [Write Data] check device state error (first) !")
+                log("[Error] [Write Data] check device state error (first) !")
                 return false
             }
             
-            while(packetIndex < writePacket.size)
-            {
-                delay(intervalTime)
-                ConnectionManager.writeCharacteristic(device, characteristic, context, writePacket[packetIndex++].toByteArray())
-                
-                if(packetIndex % packetsPerTransfer == 0 && retryTimes < maxCheckTimes)
-                {
-                    // if CRC is incorrect
-                    if(!isMcuStateOk())
-                    {
-                        packetIndex -= packetsPerTransfer
-                        retryTimes++
-                    }
-                    else retryTimes = 0
-                }
-                else if(packetIndex == writePacket.size && retryTimes < maxCheckTimes)
-                {
-                    // if CRC is incorrect
-                    if(!isMcuStateOk())
-                    {
-                        packetIndex -= (packetIndex % packetsPerTransfer)
-                        retryTimes++
-                    }
-                    else retryTimes = 0
-                }
-            }
-            */
+            log("CheckStatus success!")
+//            while(packetIndex < writePacket.size)
+//            {
+//                delay(intervalTime)
+//                ConnectionManager.writeCharacteristic(device, characteristic, context, writePacket[packetIndex++].toByteArray())
+//
+//                if(packetIndex % packetsPerTransfer == 0 && retryTimes < maxCheckTimes)
+//                {
+//                    // if CRC is incorrect
+//                    if(!isMcuStateOk())
+//                    {
+//                        packetIndex -= packetsPerTransfer
+//                        retryTimes++
+//                    }
+//                    else retryTimes = 0
+//                }
+//                else if(packetIndex == writePacket.size && retryTimes < maxCheckTimes)
+//                {
+//                    // if CRC is incorrect
+//                    if(!isMcuStateOk())
+//                    {
+//                        packetIndex -= (packetIndex % packetsPerTransfer)
+//                        retryTimes++
+//                    }
+//                    else retryTimes = 0
+//                }
+//            }
+            
             return true
         }
         else

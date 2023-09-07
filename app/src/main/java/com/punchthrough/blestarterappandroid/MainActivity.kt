@@ -29,9 +29,6 @@ import android.content.Context
 import android.content.Intent
 import android.content.pm.PackageManager
 import android.os.Bundle
-import android.view.View
-import android.widget.ProgressBar
-import android.widget.SearchView
 import androidx.activity.result.contract.ActivityResultContracts
 import androidx.appcompat.app.AppCompatActivity
 import androidx.core.app.ActivityCompat
@@ -45,7 +42,6 @@ import kotlinx.android.synthetic.main.activity_main.scan_button
 import kotlinx.android.synthetic.main.activity_main.scan_results_recycler_view
 import kotlinx.android.synthetic.main.activity_main.searchView
 import org.jetbrains.anko.alert
-import org.jetbrains.anko.runOnUiThread
 import timber.log.Timber
 
 const val BLUETOOTH_SCAN_PERMISSION_REQUEST_CODE = 3

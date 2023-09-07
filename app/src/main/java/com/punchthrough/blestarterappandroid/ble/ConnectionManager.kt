@@ -311,6 +311,8 @@ object ConnectionManager
             return
         }
         
+        
+        
         // TODO: Make sure each operation ultimately leads to signalEndOfOperation()
         // TODO: Refactor this into an BleOperationType abstract or extension function
         when(operation)
