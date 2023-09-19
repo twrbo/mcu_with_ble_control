@@ -138,10 +138,9 @@ class MainActivity : AppCompatActivity()
                 else -> false
             }
         }
-        
-        // Transfer context in order to check permission
-        ConnectionManager.init(this)
-        ConnectionManager.setCallbackContext(this)
+    
+        // Pass activity
+        ConnectionManager.initActivity(this)
     }
     
     
@@ -154,8 +153,6 @@ class MainActivity : AppCompatActivity()
             promptEnableBluetooth()
         }
         
-        // Transfer context in order to check permission
-        ConnectionManager.setCallbackContext(this)
     }
     
     private val enableBluetoothLauncher = registerForActivityResult(ActivityResultContracts.StartActivityForResult()) { result ->

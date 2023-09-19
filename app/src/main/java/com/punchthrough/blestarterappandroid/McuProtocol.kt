@@ -18,7 +18,6 @@ package com.punchthrough.blestarterappandroid
 
 import android.bluetooth.BluetoothDevice
 import android.bluetooth.BluetoothGattCharacteristic
-import android.content.Context
 import android.view.View
 import android.widget.ScrollView
 import android.widget.TextView
@@ -32,29 +31,34 @@ import timber.log.Timber
 import java.text.SimpleDateFormat
 import java.util.Date
 import java.util.Locale
-import kotlin.experimental.or
+import java.util.zip.CRC32
 
 object McuProtocol
 {
-    
-    private const val MCU_BUFFER_SIZE: Int = 1024           // device data buffer size
+    // Size
+    private const val MCU_BUFFER_SIZE: Int = 1024   // device data buffer size
+    private const val MCU_PACKET_SIZE: Int = 64
     private const val BLE_TRANSFER_SIZE: Int = 512
+    private const val CRC_SIZE: Int = 4
     
-    // Control Byte //
+    // MCU Protocol Defined ------------------------------ //
+    // Control Byte
     private const val MCU_READ: Byte = 0x04
     private const val MCU_WRITE: Byte = 0x00
     private const val MCU_CHECK: Byte = 0x10
-    private const val MCU_CMD: Byte = 0x01
     
-    // Error Code //
-    // MCU state
-    const val MCU_STATE_OK: Byte = 0x0000          // MCU OK
-    private const val MCU_STATE_BUSY: Byte = 0x0001        // MCU busy
-    private const val MCU_STATE_CMD_ERROR: Byte = 0x0010   // MCU CMD Error
+    // MCU State
+    const val MCU_STATE_OK: Byte = 0x00
+    private const val MCU_STATE_BUSY: Byte = 0x01
+    private const val MCU_STATE_CMD_ERROR: Byte = 0x10
+    // MCU Protocol Defined ------------------------------ //
     
+    private const val BLE_TIME_OUT: Byte = 0x0A
+    private const val CRC_ERROR: Byte = 0x0B
+    private const val MCU_PACKET_SIZE_UNMATCHED: Byte = 0x0C
     
-    // Parameter
-    private var receivedBuffer: ArrayList<Byte> = ArrayList()
+    // Parameter ------------------------------------------------------------- //
+    private var receivedBuffer: ArrayList<Byte> = ArrayList<Byte>()
     private var isTrigger: Boolean = false
     private var requestedDataLength = 0
     private var errorCode: Byte = MCU_STATE_OK
@@ -63,18 +67,20 @@ object McuProtocol
     private var waitRWTime: Long = 10        // Wait time for device read/write data to target device
     private var checkIntervalTime: Long = 50 // The interval time of check device
     private var maxCheckTimes: Int = 3      // Max times of check device state
+    private var waitingNotificationTime: Long = 6000
+    private var intervalWriteTime: Long = 1
     
     private lateinit var activity: AppCompatActivity
+    // Parameter ------------------------------------------------------------- //
     
-    // 初始化方法，用於設置 BleOperationsActivity 的參考
-    fun init(activity: AppCompatActivity)
+    fun initActivity(activity: AppCompatActivity)
     {
         this.activity = activity
     }
     
     private fun log(message: String)
     {
-        val dateFormatter = SimpleDateFormat("MMM d, HH:mm:ss", Locale.US)
+        val dateFormatter = SimpleDateFormat("HH:mm:ss", Locale.TAIWAN)
         val formattedMessage = String.format("%s: %s", dateFormatter.format(Date()), message)
         val textViewLog = activity.findViewById<TextView>(R.id.log_text_view)
         val scrollViewLog = activity.findViewById<ScrollView>(R.id.log_scroll_view)
@@ -98,22 +104,37 @@ object McuProtocol
         isTrigger = true;
     }
     
-    fun setReceivedBuffer(payload: ArrayList<Byte>)
+    fun setReceivedData(payload: ArrayList<Byte>)
     {
         receivedBuffer = payload
     }
+
+//    fun ArrayList<Byte>.toHexString(): String =
+//        joinToString(separator = " ", prefix = "") { String.format("%02X", it) }
     
-    fun getReceivedBuffer(): ArrayList<Byte>
+    private fun ArrayList<Byte>.toHexString(): String
     {
-        return receivedBuffer
+        val builder = StringBuilder()
+        builder.append("Total Bytes: ${this.size}")
+        for(i in indices)
+        {
+            if(i % 16 == 0)
+            {
+                builder.append("\n") // 換行，每行 16 個字節
+            }
+            builder.append(String.format("%02X", this[i]))
+            builder.append("\t") // 添加空格分隔字節
+        }
+        return builder.toString()
     }
+    
     
     fun getErrorCode(): Byte
     {
         return errorCode
     }
     
-    suspend fun write(device: BluetoothDevice, characteristic: BluetoothGattCharacteristic, context: Context, payload: ByteArray): Boolean
+    suspend fun write(device: BluetoothDevice, characteristic: BluetoothGattCharacteristic, payload: ByteArray): Boolean
     {
         val writeType = when
         {
@@ -137,19 +158,27 @@ object McuProtocol
             val packetsPerTransfer = 3
             var retryTimes = 0
             
+            // Test CRC
+            val testData = ArrayList<Byte>()
+            for(i in 0 until 509)
+            {
+                testData.add((i % 256).toByte())
+            }
+            val crcTestBytes = generateCRC32(testData)
+            Timber.e("crcTestData: ${testData.toHexString()}")
+            Timber.e("crcTestValue: ${crcTestBytes.toHexString()}")
             
             // Check status
-            if(!checkMcuStateEx(device, characteristic, context))
-            {
-                log("[Error] [Write Data] check device state error (first) !")
-                return false
-            }
-            
-            log("CheckStatus success!")
+//            if(!checkMcuStateEx(device, characteristic))
+//            {
+//                return false
+//            }
+
+
 //            while(packetIndex < writePacket.size)
 //            {
 //                delay(intervalTime)
-//                ConnectionManager.writeCharacteristic(device, characteristic, context, writePacket[packetIndex++].toByteArray())
+//                ConnectionManager.writeCharacteristic(device, characteristic, writePacket[packetIndex++].toByteArray())
 //
 //                if(packetIndex % packetsPerTransfer == 0 && retryTimes < maxCheckTimes)
 //                {
@@ -182,7 +211,7 @@ object McuProtocol
         return false
     }
     
-    suspend fun read(device: BluetoothDevice, characteristic: BluetoothGattCharacteristic, context: Context, payload: ByteArray): Boolean
+    suspend fun read(device: BluetoothDevice, characteristic: BluetoothGattCharacteristic, payload: ByteArray): Boolean
     {
         val writeType = when
         {
@@ -200,44 +229,95 @@ object McuProtocol
         }
         if(device.isConnected())
         {
-            val readCMD = ByteArray(64) { 0xFF.toByte() }
-            readCMD[0] = MCU_READ
-            val readData = ArrayList<Byte>()
-            var retryTimes = 0
-            
             // Check status
-            if(!checkMcuStateEx(device, characteristic, context))
+            if(!checkMcuStateEx(device, characteristic))
             {
-                println("[Error] [Write Data] check device state error (first) !")
                 return false
             }
+            // Make log order correct
+            delay(intervalWriteTime)
             
-            // Write READ INFO
-            ConnectionManager.writeCharacteristic(device, characteristic, context, payload)
+            // Build ReadInfo packet
+            val readINFO = ArrayList<Byte>(List(MCU_PACKET_SIZE - CRC_SIZE - 1) { 0xFF.toByte() })   // Control Byte: 1 byte
+            for(i in payload.indices)
+            {
+                readINFO[i] = payload[i]
+            }
+            var crcBytes = generateCRC32(readINFO)
+            readINFO.addAll(0, crcBytes)
+            readINFO.add(0, MCU_READ)
+            // Send ReadInfo packet
+            ConnectionManager.writeCharacteristic(device, characteristic, readINFO.toByteArray())
+            
+//            log("SentReadInfo, ${readINFO.toHexString()}")
+            // Make log order correct
+            delay(intervalWriteTime)
+            
             if(!isMcuStateOk())
             {
                 return false
             }
             
-            // Check status
-            if(!checkMcuStateEx(device, characteristic, context))
+            // Make log order correct
+            delay(intervalWriteTime)
+            
+            
+            // Build ReadCMD
+            val readCMD = ArrayList<Byte>(List(MCU_PACKET_SIZE - CRC_SIZE - 1) { 0xFF.toByte() })   // Control Byte: 1 byte
+            crcBytes = generateCRC32(readCMD)
+            readCMD.addAll(0, crcBytes)
+            readCMD.add(0, MCU_READ)
+            
+            val data = ArrayList<Byte>()
+            lateinit var tempData: ArrayList<Byte>
+            var remainingDataLength = 0
+            var retryTimes = 0
+            while(data.size < requestedDataLength && retryTimes < 3)
             {
-                println("[Error] [Write Data] check device state error (first) !")
+                // Check status
+                if(!checkMcuStateEx(device, characteristic))
+                {
+                    return false
+                }
+                // Send ReadCMD packet
+                ConnectionManager.writeCharacteristic(device, characteristic, readCMD.toByteArray())
+                
+//                log("SentReadCMD, ${readCMD.toHexString()}")
+                // Make log order correct
+                delay(intervalWriteTime)
+                
+                
+                remainingDataLength = requestedDataLength - data.size
+                tempData = ArrayList<Byte>()
+                if(remainingDataLength > MCU_BUFFER_SIZE - CRC_SIZE)
+                    tempData.addAll(getReceivedData(3))
+                else if(((BLE_TRANSFER_SIZE - CRC_SIZE) < remainingDataLength) && (remainingDataLength <= (MCU_BUFFER_SIZE - CRC_SIZE)))
+                    tempData.addAll(getReceivedData(2))
+                else
+                    tempData.addAll(getReceivedData(1))
+                
+                // Check CRC32
+                if(verifyCRC32(tempData))
+                {
+                    data.addAll(tempData.subList(CRC_SIZE, tempData.size))
+                    retryTimes = 0
+                }
+                else
+                {
+                    log("[Error] [Read] CRC32 check error")
+                    retryTimes++
+                }
+            }
+            
+            
+            if(retryTimes >= maxCheckTimes)
+            {
+                log("[Error] [Read] Max retries exceeded !")
                 return false
             }
             
-            // Write READ CMD
-            while(readData.size < requestedDataLength && retryTimes < 3)
-            {
-                ConnectionManager.writeCharacteristic(device, characteristic, context, readCMD)
-                if(getReadData())
-                {
-                    readData.addAll(getReceivedBuffer())
-                    retryTimes = 0
-                }
-                else retryTimes++
-            }
-            
+            log("MCU Read is done. Received data: ${data.toHexString()}")
+            return true
         }
         else
         {
@@ -248,12 +328,55 @@ object McuProtocol
         return true
     }
     
-    private suspend fun checkMcuState(device: BluetoothDevice, characteristic: BluetoothGattCharacteristic, context: Context): Boolean
+    private suspend fun checkMcuStateEx(device: BluetoothDevice, characteristic: BluetoothGattCharacteristic): Boolean
     {
-        val checkPacket = ByteArray(64) { 0xFF.toByte() }
-        checkPacket[0] = MCU_CHECK
+        var currentTimes = 0
         
-        if(!ConnectionManager.writeCharacteristic(device, characteristic, context, checkPacket)) return false
+        while(currentTimes < maxCheckTimes)
+        {
+            if(checkMcuState(device, characteristic))
+            {
+                return true
+            }
+            else if(errorCode == MCU_STATE_BUSY)
+            {
+                log("[Warning] [Check State] MCU busy, times : ${++currentTimes}")
+            }
+            else if(errorCode == BLE_TIME_OUT)
+            {
+                log("[Warning] [Check State] Time out, no response, times : ${++currentTimes}")
+            }
+            else if(errorCode == CRC_ERROR)
+            {
+                log("[Error] [Check State] CRC32 check error")
+                return false
+            }
+            else
+            {
+                log("[Error] [Check State] Unexpected error ! Error code: ${String.format("%02X", errorCode)}")
+                return false
+            }
+            
+            delay(checkIntervalTime) // check state interval time
+        }
+        
+        log("[Error] [Check State] Max retries exceeded !")
+        return false
+    }
+    
+    private suspend fun checkMcuState(device: BluetoothDevice, characteristic: BluetoothGattCharacteristic): Boolean
+    {
+        val checkPacket = ArrayList<Byte>(List(MCU_PACKET_SIZE - CRC_SIZE - 1) { 0xFF.toByte() })   // Control Byte: 1 byte
+        val crcBytes = generateCRC32(checkPacket)
+        
+        // Put CRC32 Bytes after Control Byte
+        checkPacket.addAll(0, crcBytes)
+        checkPacket.add(0, MCU_CHECK)
+        
+        
+//        log("SentCheckPacket, ${checkPacket.toHexString()}")
+        
+        if(!ConnectionManager.writeCharacteristic(device, characteristic, checkPacket.toByteArray())) return false
         
         if(!isMcuStateOk()) return false
         
@@ -262,48 +385,101 @@ object McuProtocol
     
     private suspend fun isMcuStateOk(): Boolean
     {
-        waitCharacteristicChanged()
-        if(receivedBuffer[0] != MCU_STATE_OK)
+        if(waitCharacteristicChanged(waitingNotificationTime))
         {
-            errorCode = receivedBuffer[0]
-            return false
-        }
-        return true
-    }
-    
-    private suspend fun getReadData(): Boolean
-    {
-        waitCharacteristicChanged()
-        TODO("CHECK CRC")
-        return true
-    }
-    
-    
-    private suspend fun checkMcuStateEx(device: BluetoothDevice, characteristic: BluetoothGattCharacteristic, context: Context): Boolean
-    {
-        var currentTimes = 0
-        
-        while(currentTimes < maxCheckTimes)
-        {
-            if(checkMcuState(device, characteristic, context))
+//            log("ReceivedStatusPacket, ${receivedBuffer.toHexString()}")
+            if(receivedBuffer.size < MCU_PACKET_SIZE)
             {
-                return true
-            }
-            else if(errorCode == MCU_STATE_BUSY)
-            {
-                println("[Warning] [Check State] MCU busy, times : ${++currentTimes}")
-            }
-            else
-            {
-                println("[Error] [Check State] Unexpected error !")
+                errorCode = MCU_PACKET_SIZE_UNMATCHED
                 return false
             }
             
-            delay(checkIntervalTime) // check state interval time
+            if(!verifyCRC32(receivedBuffer))
+            {
+                errorCode = CRC_ERROR
+                return false
+            }
+            
+            if(receivedBuffer[CRC_SIZE] != MCU_STATE_OK)
+            {
+                errorCode = receivedBuffer[CRC_SIZE]
+                return false
+            }
+            else return true
+        }
+        else
+        {
+            errorCode = BLE_TIME_OUT
+            return false
+        }
+    }
+    
+    private fun getReceivedData(): ArrayList<Byte>
+    {
+        return receivedBuffer
+    }
+    
+    private suspend fun getReceivedData(times: Int): ArrayList<Byte>
+    {
+        val tempBuffer = ArrayList<Byte>()
+        for(i in 0 until times)
+        {
+            if(waitCharacteristicChanged(waitingNotificationTime))
+                tempBuffer.addAll(receivedBuffer)
+            else
+            {
+                errorCode = BLE_TIME_OUT
+                log("[Error] [Read] Time out at No.${i + 1} transaction. Data may be incorrect")
+            }
+        }
+        return tempBuffer
+    }
+    
+    private fun generateCRC32(data: ArrayList<Byte>): ArrayList<Byte>
+    {
+        val crc = CRC32()
+        crc.update(data.toByteArray())
+        
+        val crcBytes = ArrayList<Byte>(4)
+        crcBytes.add((crc.value shr 24).toByte())
+        crcBytes.add((crc.value shr 16).toByte())
+        crcBytes.add((crc.value shr 8).toByte())
+        crcBytes.add(crc.value.toByte())
+
+//        var temp = ""
+//        for(value in data)
+//        {
+//            temp += String.format("%02X ", value)
+//        }
+//        Timber.e("CRC Test Data(HEX): ${temp}")
+//
+//        temp = ""
+//        for(value in crcBytes)
+//        {
+//            temp += String.format("%02X ", value)
+//        }
+//        Timber.e("CRC calculated values(Hex): ${temp}")
+//        Timber.e("CRC calculated values(Dec) ${crc.value}")
+        
+        return crcBytes
+    }
+    
+    private fun verifyCRC32(data: ArrayList<Byte>): Boolean
+    {
+        val receivedCRCBytes = ArrayList<Byte>(data.subList(0, CRC_SIZE))
+        val pureData = ArrayList<Byte>(data.subList(CRC_SIZE, data.size))
+        val crcBytes = generateCRC32(pureData)
+        
+        for(i in 0 until CRC_SIZE)
+        {
+            if(crcBytes[i] != receivedCRCBytes[i])
+            {
+                errorCode = CRC_ERROR
+                return false
+            }
         }
         
-        println("[Error] [Check State] Max retries exceeded !")
-        return false
+        return true
     }
     
     private fun buildWritePacket(sourceData: ByteArray): ArrayList<ArrayList<Byte>>
@@ -314,7 +490,7 @@ object McuProtocol
         var chkSum = 0
         
         // first packet
-        packet[dataInPacket++] = MCU_WRITE or MCU_CMD
+        packet[dataInPacket++] = MCU_WRITE
         
         for((sourceDataIndex, byteValue) in sourceData.withIndex())
         {
@@ -337,17 +513,28 @@ object McuProtocol
         return writePacket
     }
     
-    
-    private suspend fun waitCharacteristicChanged()
+    private suspend fun waitCharacteristicChanged(waitingTime: Long): Boolean
     {
+        val startTime = System.currentTimeMillis()
+        
         while(!isTrigger)
         {
-            delay(10)
+            if(System.currentTimeMillis() - startTime > waitingTime)
+            {
+                delay(10)
+                break
+            }
         }
-        isTrigger = false;
+        
+        if(isTrigger)
+        {
+            isTrigger = false
+            return true
+        }
+        else return false
     }
     
-    private fun buildNbytesPacket(payload: ByteArray): ByteArray
+    private fun buildNBytesPacket(payload: ByteArray): ByteArray
     {
         var length: Int = 0
         for(element in payload)
@@ -357,6 +544,5 @@ object McuProtocol
         
         return ByteArray(length) { i -> i.toByte() }
     }
-    
     
 }

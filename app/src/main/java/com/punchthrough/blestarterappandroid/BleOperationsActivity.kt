@@ -64,7 +64,7 @@ class BleOperationsActivity : AppCompatActivity()
 {
     
     private lateinit var device: BluetoothDevice
-    private val dateFormatter = SimpleDateFormat("MMM d, HH:mm:ss", Locale.US)
+    private val dateFormatter = SimpleDateFormat("HH:mm:ss", Locale.TAIWAN)
     private val characteristics by lazy {
         ConnectionManager.servicesOnDevice(device)?.flatMap { service ->
             service.characteristics ?: listOf()
@@ -121,17 +121,14 @@ class BleOperationsActivity : AppCompatActivity()
 //            hideKeyboard()
 //        }
         
-        // Pass context
-        McuProtocol.init(this)
-        
-        // Transfer context in order to check permission
-        ConnectionManager.setCallbackContext(this)
+        // Pass activity
+        McuProtocol.initActivity(this)
     }
     
     override fun onDestroy()
     {
         ConnectionManager.unregisterListener(connectionEventListener)
-        ConnectionManager.teardownConnection(device, this)
+        ConnectionManager.teardownConnection(device)
         super.onDestroy()
     }
     
@@ -195,7 +192,7 @@ class BleOperationsActivity : AppCompatActivity()
                     CharacteristicProperty.Readable ->
                     {
                         log("Reading from ${characteristic.uuid}")
-                        ConnectionManager.readCharacteristic(device, characteristic, this)
+                        ConnectionManager.readCharacteristic(device, characteristic)
                     }
                     
                     CharacteristicProperty.Writable, CharacteristicProperty.WritableWithoutResponse ->
@@ -208,12 +205,12 @@ class BleOperationsActivity : AppCompatActivity()
                         if(notifyingCharacteristics.contains(characteristic.uuid))
                         {
                             log("Disabling notifications on ${characteristic.uuid}")
-                            ConnectionManager.disableNotifications(device, characteristic, this)
+                            ConnectionManager.disableNotifications(device, characteristic)
                         }
                         else
                         {
                             log("Enabling notifications on ${characteristic.uuid}")
-                            ConnectionManager.enableNotifications(device, characteristic, this)
+                            ConnectionManager.enableNotifications(device, characteristic)
                         }
                     }
                 }
@@ -244,12 +241,15 @@ class BleOperationsActivity : AppCompatActivity()
         }
         var desValue: ByteArray? = null
         desValue = characteristic.getDescriptor(descriptorUuid).value
-        if(desValue == null) ConnectionManager.enableNotifications(device, characteristic, this@BleOperationsActivity)
+        if(desValue == null) ConnectionManager.enableNotifications(device, characteristic)
         
         alert("Operation") {
             customView = view
             isCancelable = false
             positiveButton("Yes") {
+                // Clear log
+                log_text_view.text=""
+                ConnectionManager.setProgressBar(true)
                 with(editTextPayload.text.toString()) {
                     if(isNotBlank() && isNotEmpty())
                     {
@@ -265,7 +265,7 @@ class BleOperationsActivity : AppCompatActivity()
                             {
                                 McuProtocol.setDataLength(dataLengthText.toInt())
                                 CoroutineScope(Dispatchers.Main).launch {
-                                    McuProtocol.read(device, characteristic, this@BleOperationsActivity, bytes)
+                                    McuProtocol.read(device, characteristic, bytes)
                                 }
                             }
                             else
@@ -280,7 +280,7 @@ class BleOperationsActivity : AppCompatActivity()
                             
                             // Start MCU Write
                             CoroutineScope(Dispatchers.Main).launch {
-                                McuProtocol.write(device, characteristic, this@BleOperationsActivity, bytes)
+                                McuProtocol.write(device, characteristic, bytes)
                             }
                             
                         }
@@ -320,26 +320,26 @@ class BleOperationsActivity : AppCompatActivity()
             }
             
             onMtuChanged = { _, mtu ->
-                log("MTU updated to $mtu")
+//                log("MTU updated to $mtu")
             }
             
             onCharacteristicChanged = { _, characteristic ->
-                log("Value changed on ${characteristic.uuid}: ${characteristic.value.toHexString()}")
+//                log("Value changed on ${characteristic.uuid}: ${characteristic.value.toHexString()}")
                 
                 if(characteristic.value != null)
                 {
-                    McuProtocol.setReceivedBuffer(characteristic.value.toArrayList())
+                    McuProtocol.setReceivedData(characteristic.value.toArrayList())
                     McuProtocol.setTrigger()
                 }
             }
             
             onNotificationsEnabled = { _, characteristic ->
-                log("Enabled notifications on ${characteristic.uuid}")
+//                log("Enabled notifications on ${characteristic.uuid}")
                 notifyingCharacteristics.add(characteristic.uuid)
             }
             
             onNotificationsDisabled = { _, characteristic ->
-                log("Disabled notifications on ${characteristic.uuid}")
+//                log("Disabled notifications on ${characteristic.uuid}")
                 notifyingCharacteristics.remove(characteristic.uuid)
             }
         }
