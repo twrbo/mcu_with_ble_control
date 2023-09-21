@@ -67,7 +67,7 @@ object McuProtocol
     private var waitRWTime: Long = 10        // Wait time for device read/write data to target device
     private var checkIntervalTime: Long = 50 // The interval time of check device
     private var maxCheckTimes: Int = 3      // Max times of check device state
-    private var waitingNotificationTime: Long = 2000
+    private var waitingNotificationTime: Long = 5000
     private var intervalWriteTime: Long = 1
     
     private lateinit var activity: AppCompatActivity
