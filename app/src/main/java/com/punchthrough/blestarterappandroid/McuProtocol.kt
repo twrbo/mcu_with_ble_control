@@ -67,72 +67,11 @@ object McuProtocol
     private var waitRWTime: Long = 10        // Wait time for device read/write data to target device
     private var checkIntervalTime: Long = 50 // The interval time of check device
     private var maxCheckTimes: Int = 3      // Max times of check device state
-    private var waitingNotificationTime: Long = 6000
+    private var waitingNotificationTime: Long = 2000
     private var intervalWriteTime: Long = 1
     
     private lateinit var activity: AppCompatActivity
     // Parameter ------------------------------------------------------------- //
-    
-    fun initActivity(activity: AppCompatActivity)
-    {
-        this.activity = activity
-    }
-    
-    private fun log(message: String)
-    {
-        val dateFormatter = SimpleDateFormat("HH:mm:ss", Locale.TAIWAN)
-        val formattedMessage = String.format("%s: %s", dateFormatter.format(Date()), message)
-        val textViewLog = activity.findViewById<TextView>(R.id.log_text_view)
-        val scrollViewLog = activity.findViewById<ScrollView>(R.id.log_scroll_view)
-        activity.runOnUiThread {
-            
-            val currentLogText = textViewLog.text.ifEmpty {
-                "Beginning of log."
-            }
-            textViewLog.text = "$currentLogText\n$formattedMessage"
-            scrollViewLog.post { scrollViewLog.fullScroll(View.FOCUS_DOWN) }
-        }
-    }
-    
-    fun setDataLength(length: Int)
-    {
-        requestedDataLength = length
-    }
-    
-    fun setTrigger()
-    {
-        isTrigger = true;
-    }
-    
-    fun setReceivedData(payload: ArrayList<Byte>)
-    {
-        receivedBuffer = payload
-    }
-
-//    fun ArrayList<Byte>.toHexString(): String =
-//        joinToString(separator = " ", prefix = "") { String.format("%02X", it) }
-    
-    private fun ArrayList<Byte>.toHexString(): String
-    {
-        val builder = StringBuilder()
-        builder.append("Total Bytes: ${this.size}")
-        for(i in indices)
-        {
-            if(i % 16 == 0)
-            {
-                builder.append("\n") // 換行，每行 16 個字節
-            }
-            builder.append(String.format("%02X", this[i]))
-            builder.append("\t") // 添加空格分隔字節
-        }
-        return builder.toString()
-    }
-    
-    
-    fun getErrorCode(): Byte
-    {
-        return errorCode
-    }
     
     suspend fun write(device: BluetoothDevice, characteristic: BluetoothGattCharacteristic, payload: ByteArray): Boolean
     {
@@ -249,6 +188,7 @@ object McuProtocol
             // Send ReadInfo packet
             ConnectionManager.writeCharacteristic(device, characteristic, readINFO.toByteArray())
             
+            // DEBUG
 //            log("SentReadInfo, ${readINFO.toHexString()}")
             // Make log order correct
             delay(intervalWriteTime)
@@ -267,12 +207,15 @@ object McuProtocol
             crcBytes = generateCRC32(readCMD)
             readCMD.addAll(0, crcBytes)
             readCMD.add(0, MCU_READ)
+            log("MCU Read is executing. Request length: $requestedDataLength")
             
             val data = ArrayList<Byte>()
-            lateinit var tempData: ArrayList<Byte>
+            lateinit var tempBuffer: ArrayList<Byte>
             var remainingDataLength = 0
             var retryTimes = 0
-            while(data.size < requestedDataLength && retryTimes < 3)
+            var dummySize = 0
+            var maxDataLength = 0
+            while(data.size < requestedDataLength && retryTimes < 1)
             {
                 // Check status
                 if(!checkMcuStateEx(device, characteristic))
@@ -282,28 +225,57 @@ object McuProtocol
                 // Send ReadCMD packet
                 ConnectionManager.writeCharacteristic(device, characteristic, readCMD.toByteArray())
                 
-//                log("SentReadCMD, ${readCMD.toHexString()}")
+                
                 // Make log order correct
                 delay(intervalWriteTime)
                 
                 
                 remainingDataLength = requestedDataLength - data.size
-                tempData = ArrayList<Byte>()
+                // DEBUG
+                log("Remaining data length: $remainingDataLength.")
+                tempBuffer = ArrayList<Byte>()
                 if(remainingDataLength > MCU_BUFFER_SIZE - CRC_SIZE)
-                    tempData.addAll(getReceivedData(3))
+                {
+                    // Get via 3 notifications
+                    if(!getReceivedData(tempBuffer, 3))
+                    {
+                        return false
+                    }
+                    maxDataLength = if(remainingDataLength > MCU_BUFFER_SIZE) MCU_BUFFER_SIZE else remainingDataLength
+                }
                 else if(((BLE_TRANSFER_SIZE - CRC_SIZE) < remainingDataLength) && (remainingDataLength <= (MCU_BUFFER_SIZE - CRC_SIZE)))
-                    tempData.addAll(getReceivedData(2))
+                {
+                    // Get via 2 notifications
+                    if(!getReceivedData(tempBuffer, 2))
+                    {
+                        return false
+                    }
+                    maxDataLength = remainingDataLength
+                }
                 else
-                    tempData.addAll(getReceivedData(1))
+                {
+                    // Get via 1 notification
+                    if(!getReceivedData(tempBuffer, 1))
+                    {
+                        return false
+                    }
+                    maxDataLength = remainingDataLength
+                }
                 
                 // Check CRC32
-                if(verifyCRC32(tempData))
+                if(verifyCRC32(tempBuffer))
                 {
-                    data.addAll(tempData.subList(CRC_SIZE, tempData.size))
+                    if((maxDataLength + CRC_SIZE) % MCU_PACKET_SIZE != 0)
+                        dummySize = MCU_PACKET_SIZE - ((maxDataLength + CRC_SIZE) % MCU_PACKET_SIZE)
+                    else
+                        dummySize = 0
+                    // Remove dummy and CRC bytes
+                    data.addAll(tempBuffer.subList(CRC_SIZE, tempBuffer.size - dummySize))
                     retryTimes = 0
                 }
                 else
                 {
+                    log("tempBuffer: ${tempBuffer.toHexString()}")
                     log("[Error] [Read] CRC32 check error")
                     retryTimes++
                 }
@@ -373,7 +345,7 @@ object McuProtocol
         checkPacket.addAll(0, crcBytes)
         checkPacket.add(0, MCU_CHECK)
         
-        
+        // DEBUG
 //        log("SentCheckPacket, ${checkPacket.toHexString()}")
         
         if(!ConnectionManager.writeCharacteristic(device, characteristic, checkPacket.toByteArray())) return false
@@ -387,6 +359,7 @@ object McuProtocol
     {
         if(waitCharacteristicChanged(waitingNotificationTime))
         {
+            // DEBUG
 //            log("ReceivedStatusPacket, ${receivedBuffer.toHexString()}")
             if(receivedBuffer.size < MCU_PACKET_SIZE)
             {
@@ -419,9 +392,8 @@ object McuProtocol
         return receivedBuffer
     }
     
-    private suspend fun getReceivedData(times: Int): ArrayList<Byte>
+    private suspend fun getReceivedData(tempBuffer: ArrayList<Byte>, times: Int): Boolean
     {
-        val tempBuffer = ArrayList<Byte>()
         for(i in 0 until times)
         {
             if(waitCharacteristicChanged(waitingNotificationTime))
@@ -429,10 +401,31 @@ object McuProtocol
             else
             {
                 errorCode = BLE_TIME_OUT
-                log("[Error] [Read] Time out at No.${i + 1} transaction. Data may be incorrect")
+                log("[Error] [Read] Time out at no.${i + 1} transaction.")
+                return false
             }
         }
-        return tempBuffer
+        return true
+    }
+    
+    private suspend fun waitCharacteristicChanged(waitingTime: Long): Boolean
+    {
+        val startTime = System.currentTimeMillis()
+        
+        while(!isTrigger)
+        {
+            if(System.currentTimeMillis() - startTime > waitingTime)
+            {
+                break
+            }
+        }
+        
+        if(isTrigger)
+        {
+            isTrigger = false
+            return true
+        }
+        else return false
     }
     
     private fun generateCRC32(data: ArrayList<Byte>): ArrayList<Byte>
@@ -469,7 +462,6 @@ object McuProtocol
         val receivedCRCBytes = ArrayList<Byte>(data.subList(0, CRC_SIZE))
         val pureData = ArrayList<Byte>(data.subList(CRC_SIZE, data.size))
         val crcBytes = generateCRC32(pureData)
-        
         for(i in 0 until CRC_SIZE)
         {
             if(crcBytes[i] != receivedCRCBytes[i])
@@ -481,6 +473,67 @@ object McuProtocol
         
         return true
     }
+    
+    fun initActivity(activity: AppCompatActivity)
+    {
+        this.activity = activity
+    }
+    
+    private fun log(message: String)
+    {
+        val dateFormatter = SimpleDateFormat("HH:mm:ss", Locale.TAIWAN)
+        val formattedMessage = String.format("%s: %s", dateFormatter.format(Date()), message)
+        val textViewLog = activity.findViewById<TextView>(R.id.log_text_view)
+        val scrollViewLog = activity.findViewById<ScrollView>(R.id.log_scroll_view)
+        activity.runOnUiThread {
+            
+            val currentLogText = textViewLog.text
+            textViewLog.text = "$currentLogText\n$formattedMessage"
+            scrollViewLog.post { scrollViewLog.fullScroll(View.FOCUS_DOWN) }
+        }
+    }
+    
+    fun setDataLength(length: Int)
+    {
+        requestedDataLength = length
+    }
+    
+    fun setTrigger()
+    {
+        isTrigger = true;
+    }
+    
+    fun setReceivedData(payload: ArrayList<Byte>)
+    {
+        receivedBuffer = payload
+    }
+
+//    fun ArrayList<Byte>.toHexString(): String =
+//        joinToString(separator = " ", prefix = "") { String.format("%02X", it) }
+    
+    private fun ArrayList<Byte>.toHexString(): String
+    {
+        val builder = StringBuilder()
+        builder.append("Total Bytes: ${this.size}")
+        for(i in indices)
+        {
+            if(i % 16 == 0)
+            {
+                builder.append("\n") // 換行，每行 16 個字節
+            }
+            builder.append(String.format("%02X", this[i]))
+            builder.append("\t") // 添加空格分隔字節
+        }
+        return builder.toString()
+    }
+    
+    
+    fun getErrorCode(): Byte
+    {
+        return errorCode
+    }
+    
+
     
     private fun buildWritePacket(sourceData: ByteArray): ArrayList<ArrayList<Byte>>
     {
@@ -513,26 +566,7 @@ object McuProtocol
         return writePacket
     }
     
-    private suspend fun waitCharacteristicChanged(waitingTime: Long): Boolean
-    {
-        val startTime = System.currentTimeMillis()
-        
-        while(!isTrigger)
-        {
-            if(System.currentTimeMillis() - startTime > waitingTime)
-            {
-                delay(10)
-                break
-            }
-        }
-        
-        if(isTrigger)
-        {
-            isTrigger = false
-            return true
-        }
-        else return false
-    }
+
     
     private fun buildNBytesPacket(payload: ByteArray): ByteArray
     {

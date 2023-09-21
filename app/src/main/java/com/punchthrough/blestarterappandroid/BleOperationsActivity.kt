@@ -175,9 +175,7 @@ class BleOperationsActivity : AppCompatActivity()
     {
         val formattedMessage = String.format("%s: %s", dateFormatter.format(Date()), message)
         runOnUiThread {
-            val currentLogText = log_text_view.text.ifEmpty {
-                "Beginning of log."
-            }
+            val currentLogText = log_text_view.text
             log_text_view.text = "$currentLogText\n$formattedMessage"
             log_scroll_view.post { log_scroll_view.fullScroll(View.FOCUS_DOWN) }
         }
@@ -316,7 +314,7 @@ class BleOperationsActivity : AppCompatActivity()
             }
             
             onCharacteristicWrite = { _, characteristic ->
-                log("Wrote to ${characteristic.uuid}")
+//                log("Wrote to ${characteristic.uuid}")
             }
             
             onMtuChanged = { _, mtu ->
