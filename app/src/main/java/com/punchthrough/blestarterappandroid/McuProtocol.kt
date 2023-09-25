@@ -42,7 +42,7 @@ object McuProtocol
     private const val CRC_SIZE: Int = 4
     private const val WRITE_CMD_SIZE: Int = 7
     
-    // MCU Protocol Defined ------------------------------ //
+    // ------------------------------------------- MCU Protocol Defined -------------------------------------------- //
     // Control Byte
     private const val MCU_READ: Byte = 0x04
     private const val MCU_WRITE: Byte = 0x00
@@ -52,27 +52,26 @@ object McuProtocol
     const val MCU_STATE_OK: Byte = 0x00
     private const val MCU_STATE_BUSY: Byte = 0x01
     private const val MCU_STATE_CMD_ERROR: Byte = 0x10
-    // MCU Protocol Defined ------------------------------ //
+    // ------------------------------------------------------------------------------------------------------------- //
     
     private const val BLE_TIME_OUT: Byte = 0x0A
     private const val CRC_ERROR: Byte = 0x0B
     private const val MCU_PACKET_SIZE_UNMATCHED: Byte = 0x0C
     
-    // Parameter ------------------------------------------------------------- //
+    // ---------------------------------------------- Parameter ---------------------------------------------------- //
     private var receivedBuffer: ArrayList<Byte> = ArrayList<Byte>()
     private var isTrigger: Boolean = false
     private var requestedDataLength: Int = 0
     private var errorCode: Byte = MCU_STATE_OK
     
-    private var intervalTime: Long = 5       // Interval time for readBuffer, writeBuffer function
+    private var bleOperationInterval: Long = 1       // Interval time for BLE operation
     private var waitRWTime: Long = 10        // Wait time for device read/write data to target device
     private var checkIntervalTime: Long = 50 // The interval time of check device
     private var maxCheckTimes: Int = 3      // Max times of check device state
     private var waitingNotificationTime: Long = 10000
-    private var intervalWriteTime: Long = 1
     
     private lateinit var activity: AppCompatActivity
-    // Parameter ------------------------------------------------------------- //
+    // ------------------------------------------------------------------------------------------------------------ //
     
     suspend fun write(device: BluetoothDevice, characteristic: BluetoothGattCharacteristic, payload: ByteArray): Boolean
     {
@@ -100,17 +99,10 @@ object McuProtocol
             var packetIndex = 0
             val packetsPerTransfer = 3
             var retryTimes = 0
-            var remainingByte = payload.size
-            // Test CRC
-//            val testData = ArrayList<Byte>()
-//            for(i in 0 until 509)
-//            {
-//                testData.add((i % 256).toByte())
-//            }
-//            val crcTestBytes = generateCRC32(testData)
-//            Timber.e("crcTestData: ${testData.toHexString()}")
-//            Timber.e("crcTestValue: ${crcTestBytes.toHexString()}")
+            var remainingBytes = 0
             
+            for(data in writePacket)
+                remainingBytes += data.size
             
             // Check status
             if(!checkMcuStateEx(device, characteristic))
@@ -118,66 +110,51 @@ object McuProtocol
                 return false
             }
             
-            log("MCU Write is executing. Bytes to be written: ${payload.size}")
+            log("MCU Write is executing. Input bytes: ${payload.size}")
             while(packetIndex < writePacket.size)
             {
-                delay(intervalTime)
-
-//                log("WritePacket[${packetIndex+1}]${writePacket[packetIndex].toHexString()}")
-                log("Remaining bytes: $remainingByte")
+                log("Remaining bytes: $remainingBytes")
+                remainingBytes -= writePacket[packetIndex].size
+                delay(bleOperationInterval)
                 ConnectionManager.writeCharacteristic(device, characteristic, writePacket[packetIndex++].toByteArray())
-                remainingByte -= writePacket[packetIndex - 1].size
                 
-                if(packetIndex % packetsPerTransfer == 0 && retryTimes < maxCheckTimes)
+                if((packetIndex % packetsPerTransfer == 0 || packetIndex == writePacket.size) && retryTimes < maxCheckTimes)
                 {
-                    remainingByte += 57
                     if(!isMcuStateOk())
                     {
                         // Re-transfer
-                        packetIndex -= packetsPerTransfer
+                        packetIndex -= if (packetIndex % packetsPerTransfer == 0) 3 else packetIndex % packetsPerTransfer
                         retryTimes++
+                        
+                        if(errorCode == MCU_STATE_BUSY)
+                        {
+                            log("[Warning] [Write] MCU busy, times : $retryTimes")
+                        }
+                        else if(errorCode == BLE_TIME_OUT)
+                        {
+                            log("[Warning] [Write] Time out, no response, times : $retryTimes")
+                        }
+                        else if(errorCode == CRC_ERROR)
+                        {
+                            log("[Warning] [Write] CRC32 check error")
+                        }
+                        else if(errorCode == MCU_PACKET_SIZE_UNMATCHED)
+                        {
+                            log("[Error] [Write] MCU packet size is less than 64")
+                            return false
+                        }
+                        else if(errorCode != MCU_STATE_OK)
+                        {
+                            log("[Error] [Write] Unexpected error ! Error code: ${String.format("%02X", errorCode)}")
+                            return false
+                        }
                     }
-                    else retryTimes = 0
-                }
-                else if(packetIndex == writePacket.size && retryTimes < maxCheckTimes)
-                {
-                    remainingByte += 5
-                    if(!isMcuStateOk())
-                    {
-                        // Re-transfer
-                        packetIndex -= (packetIndex % packetsPerTransfer)
-                        retryTimes++
-                    }
-                    else retryTimes = 0
-                }
-                
-                
-                if(errorCode == MCU_STATE_BUSY)
-                {
-                    log("[Warning] [Write] MCU busy, times : $retryTimes")
-                }
-                else if(errorCode == BLE_TIME_OUT)
-                {
-                    log("[Warning] [Write] Time out, no response, times : $retryTimes")
-                }
-                else if(errorCode == CRC_ERROR)
-                {
-                    log("[Warning] [Write] CRC32 check error")
-                }
-                else if(errorCode == MCU_PACKET_SIZE_UNMATCHED)
-                {
-                    log("[Error] [Write] MCU packet size is less than 64")
-                    return false
-                }
-                else if(errorCode != MCU_STATE_OK)
-                {
-                    log("[Error] [Write] Unexpected error ! Error code: ${String.format("%02X", errorCode)}")
-                    return false
+                    else
+                        retryTimes = 0
                 }
             }
             
-            log("MCU Write is done.")
-            log("total packet: ${writePacket.size}")
+            log("MCU Write is done. Total packets: ${writePacket.size}")
             return true
         }
         else
@@ -205,15 +182,13 @@ object McuProtocol
         }
         if(device.isConnected())
         {
-            
-            
             // Check status
             if(!checkMcuStateEx(device, characteristic))
             {
                 return false
             }
             // Make log order correct
-            delay(intervalWriteTime)
+            delay(bleOperationInterval)
             
             // Build ReadInfo packet
             val readINFO = ArrayList<Byte>(List(MCU_PACKET_SIZE - CRC_SIZE - 1) { 0xFF.toByte() })   // Control Byte: 1 byte
@@ -230,7 +205,7 @@ object McuProtocol
             // DEBUG
 //            log("SentReadInfo, ${readINFO.toHexString()}")
             // Make log order correct
-            delay(intervalWriteTime)
+            delay(bleOperationInterval)
             
             if(!isMcuStateOk())
             {
@@ -238,7 +213,7 @@ object McuProtocol
             }
             
             // Make log order correct
-            delay(intervalWriteTime)
+            delay(bleOperationInterval)
             
             
             // Build ReadCMD
@@ -266,7 +241,7 @@ object McuProtocol
                 
                 
                 // Make log order correct
-                delay(intervalWriteTime)
+                delay(bleOperationInterval)
                 
                 
                 remainingDataLength = requestedDataLength - data.size
@@ -435,7 +410,6 @@ object McuProtocol
     private fun buildWritePackets(sourceData: ByteArray): ArrayList<ArrayList<Byte>>
     {
         val writePacket: ArrayList<ArrayList<Byte>> = ArrayList()
-//        var packet = ArrayList<Byte>(List(BLE_TRANSFER_SIZE) { 0xFF.toByte() })
         var packet = ArrayList<Byte>()
         var tempPacket = ArrayList<Byte>()
         var crcBytes = ArrayList<Byte>()
