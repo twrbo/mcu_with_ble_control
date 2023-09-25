@@ -275,7 +275,6 @@ class BleOperationsActivity : AppCompatActivity()
                         {
                             editTextDataLength.visibility = View.INVISIBLE
                             
-                            
                             // Start MCU Write
                             CoroutineScope(Dispatchers.Main).launch {
                                 McuProtocol.write(device, characteristic, bytes)

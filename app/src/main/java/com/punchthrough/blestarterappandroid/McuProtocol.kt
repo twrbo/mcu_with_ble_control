@@ -40,6 +40,7 @@ object McuProtocol
     private const val MCU_PACKET_SIZE: Int = 64
     private const val BLE_TRANSFER_SIZE: Int = 512
     private const val CRC_SIZE: Int = 4
+    private const val WRITE_CMD_SIZE: Int = 7
     
     // MCU Protocol Defined ------------------------------ //
     // Control Byte
@@ -60,14 +61,14 @@ object McuProtocol
     // Parameter ------------------------------------------------------------- //
     private var receivedBuffer: ArrayList<Byte> = ArrayList<Byte>()
     private var isTrigger: Boolean = false
-    private var requestedDataLength = 0
+    private var requestedDataLength: Int = 0
     private var errorCode: Byte = MCU_STATE_OK
     
     private var intervalTime: Long = 5       // Interval time for readBuffer, writeBuffer function
     private var waitRWTime: Long = 10        // Wait time for device read/write data to target device
     private var checkIntervalTime: Long = 50 // The interval time of check device
     private var maxCheckTimes: Int = 3      // Max times of check device state
-    private var waitingNotificationTime: Long = 5000
+    private var waitingNotificationTime: Long = 10000
     private var intervalWriteTime: Long = 1
     
     private lateinit var activity: AppCompatActivity
@@ -92,55 +93,91 @@ object McuProtocol
         
         if(device.isConnected())
         {
-            val writePacket = buildWritePacket(payload)
+            // Test Data
+            val payload = buildNBytesPacket(payload)
+            
+            val writePacket = buildWritePackets(payload)
             var packetIndex = 0
             val packetsPerTransfer = 3
             var retryTimes = 0
-            
+            var remainingByte = payload.size
             // Test CRC
-            val testData = ArrayList<Byte>()
-            for(i in 0 until 509)
-            {
-                testData.add((i % 256).toByte())
-            }
-            val crcTestBytes = generateCRC32(testData)
-            Timber.e("crcTestData: ${testData.toHexString()}")
-            Timber.e("crcTestValue: ${crcTestBytes.toHexString()}")
+//            val testData = ArrayList<Byte>()
+//            for(i in 0 until 509)
+//            {
+//                testData.add((i % 256).toByte())
+//            }
+//            val crcTestBytes = generateCRC32(testData)
+//            Timber.e("crcTestData: ${testData.toHexString()}")
+//            Timber.e("crcTestValue: ${crcTestBytes.toHexString()}")
+            
             
             // Check status
-//            if(!checkMcuStateEx(device, characteristic))
-//            {
-//                return false
-//            }
-
-
-//            while(packetIndex < writePacket.size)
-//            {
-//                delay(intervalTime)
-//                ConnectionManager.writeCharacteristic(device, characteristic, writePacket[packetIndex++].toByteArray())
-//
-//                if(packetIndex % packetsPerTransfer == 0 && retryTimes < maxCheckTimes)
-//                {
-//                    // if CRC is incorrect
-//                    if(!isMcuStateOk())
-//                    {
-//                        packetIndex -= packetsPerTransfer
-//                        retryTimes++
-//                    }
-//                    else retryTimes = 0
-//                }
-//                else if(packetIndex == writePacket.size && retryTimes < maxCheckTimes)
-//                {
-//                    // if CRC is incorrect
-//                    if(!isMcuStateOk())
-//                    {
-//                        packetIndex -= (packetIndex % packetsPerTransfer)
-//                        retryTimes++
-//                    }
-//                    else retryTimes = 0
-//                }
-//            }
+            if(!checkMcuStateEx(device, characteristic))
+            {
+                return false
+            }
             
+            log("MCU Write is executing. Bytes to be written: ${payload.size}")
+            while(packetIndex < writePacket.size)
+            {
+                delay(intervalTime)
+
+//                log("WritePacket[${packetIndex+1}]${writePacket[packetIndex].toHexString()}")
+                log("Remaining bytes: $remainingByte")
+                ConnectionManager.writeCharacteristic(device, characteristic, writePacket[packetIndex++].toByteArray())
+                remainingByte -= writePacket[packetIndex - 1].size
+                
+                if(packetIndex % packetsPerTransfer == 0 && retryTimes < maxCheckTimes)
+                {
+                    remainingByte += 57
+                    if(!isMcuStateOk())
+                    {
+                        // Re-transfer
+                        packetIndex -= packetsPerTransfer
+                        retryTimes++
+                    }
+                    else retryTimes = 0
+                }
+                else if(packetIndex == writePacket.size && retryTimes < maxCheckTimes)
+                {
+                    remainingByte += 5
+                    if(!isMcuStateOk())
+                    {
+                        // Re-transfer
+                        packetIndex -= (packetIndex % packetsPerTransfer)
+                        retryTimes++
+                    }
+                    else retryTimes = 0
+                }
+                
+                
+                if(errorCode == MCU_STATE_BUSY)
+                {
+                    log("[Warning] [Write] MCU busy, times : $retryTimes")
+                }
+                else if(errorCode == BLE_TIME_OUT)
+                {
+                    log("[Warning] [Write] Time out, no response, times : $retryTimes")
+                }
+                else if(errorCode == CRC_ERROR)
+                {
+                    log("[Warning] [Write] CRC32 check error")
+                }
+                else if(errorCode == MCU_PACKET_SIZE_UNMATCHED)
+                {
+                    log("[Error] [Write] MCU packet size is less than 64")
+                    return false
+                }
+                else if(errorCode != MCU_STATE_OK)
+                {
+                    log("[Error] [Write] Unexpected error ! Error code: ${String.format("%02X", errorCode)}")
+                    return false
+                }
+            }
+            
+            log("MCU Write is done.")
+            log("total packet: ${writePacket.size}")
             return true
         }
         else
@@ -168,6 +205,8 @@ object McuProtocol
         }
         if(device.isConnected())
         {
+            
+            
             // Check status
             if(!checkMcuStateEx(device, characteristic))
             {
@@ -211,10 +250,10 @@ object McuProtocol
             
             val data = ArrayList<Byte>()
             lateinit var tempBuffer: ArrayList<Byte>
-            var remainingDataLength = 0
+            var remainingDataLength: Int = 0
             var retryTimes = 0
             var dummySize = 0
-            var maxDataLength = 0
+            var maxDataLength: Int = 0
             while(data.size < requestedDataLength && retryTimes < 1)
             {
                 // Check status
@@ -265,18 +304,15 @@ object McuProtocol
                 // Check CRC32
                 if(verifyCRC32(tempBuffer))
                 {
-                    if((maxDataLength + CRC_SIZE) % MCU_PACKET_SIZE != 0)
-                        dummySize = MCU_PACKET_SIZE - ((maxDataLength + CRC_SIZE) % MCU_PACKET_SIZE)
-                    else
-                        dummySize = 0
+                    if((maxDataLength + CRC_SIZE) % MCU_PACKET_SIZE != 0) dummySize = MCU_PACKET_SIZE - ((maxDataLength + CRC_SIZE) % MCU_PACKET_SIZE)
+                    else dummySize = 0
                     // Remove dummy and CRC bytes
                     data.addAll(tempBuffer.subList(CRC_SIZE, tempBuffer.size - dummySize))
                     retryTimes = 0
                 }
                 else
                 {
-                    log("tempBuffer: ${tempBuffer.toHexString()}")
-                    log("[Error] [Read] CRC32 check error")
+                    log("[Warning] [Read] CRC32 check error")
                     retryTimes++
                 }
             }
@@ -320,7 +356,12 @@ object McuProtocol
             }
             else if(errorCode == CRC_ERROR)
             {
-                log("[Error] [Check State] CRC32 check error")
+                log("[Warning] [Check State] CRC32 check error")
+                return false
+            }
+            else if(errorCode == MCU_PACKET_SIZE_UNMATCHED)
+            {
+                log("[Error] [Check State] MCU packet size is less than 64")
                 return false
             }
             else
@@ -378,13 +419,130 @@ object McuProtocol
                 errorCode = receivedBuffer[CRC_SIZE]
                 return false
             }
-            else return true
+            else
+            {
+                errorCode = MCU_STATE_OK
+                return true
+            }
         }
         else
         {
             errorCode = BLE_TIME_OUT
             return false
         }
+    }
+    
+    private fun buildWritePackets(sourceData: ByteArray): ArrayList<ArrayList<Byte>>
+    {
+        val writePacket: ArrayList<ArrayList<Byte>> = ArrayList()
+//        var packet = ArrayList<Byte>(List(BLE_TRANSFER_SIZE) { 0xFF.toByte() })
+        var packet = ArrayList<Byte>()
+        var tempPacket = ArrayList<Byte>()
+        var crcBytes = ArrayList<Byte>()
+        var isFirstPacket = true
+        var dummySize = 0
+        
+        
+        for((sourceDataIndex, byteData) in sourceData.withIndex())
+        {
+            tempPacket.add(byteData)
+            // 1st. write operation
+            if(tempPacket.size == MCU_BUFFER_SIZE + WRITE_CMD_SIZE && isFirstPacket)
+            {
+                isFirstPacket = false
+                dummySize = MCU_PACKET_SIZE - WRITE_CMD_SIZE - CRC_SIZE - 1
+                // Generate CRC32 value
+                for(i in 0 until dummySize)
+                {
+                    tempPacket.add(0xFF.toByte())
+                }
+                crcBytes = generateCRC32(tempPacket)
+                tempPacket.addAll(0, crcBytes)
+                tempPacket.add(0, MCU_WRITE)
+                
+                // Assign to writePacket
+                writePacket.add(ArrayList(tempPacket.subList(0, BLE_TRANSFER_SIZE)))
+                writePacket.add(ArrayList(tempPacket.subList(BLE_TRANSFER_SIZE, BLE_TRANSFER_SIZE * 2)))
+                writePacket.add(ArrayList(tempPacket.subList(BLE_TRANSFER_SIZE * 2, BLE_TRANSFER_SIZE * 2 + MCU_PACKET_SIZE)))
+                tempPacket.clear()
+            }
+            // 2nd. ~ N-1 th. write operation
+            else if(tempPacket.size == MCU_BUFFER_SIZE && !isFirstPacket)
+            {
+                dummySize = MCU_PACKET_SIZE - CRC_SIZE - 1
+                // Generate CRC32 value
+                for(i in 0 until dummySize)
+                {
+                    tempPacket.add(0xFF.toByte())
+                }
+                crcBytes = generateCRC32(tempPacket)
+                tempPacket.addAll(0, crcBytes)
+                tempPacket.add(0, MCU_WRITE)
+                
+                // Assign to writePacket
+                writePacket.add(ArrayList(tempPacket.subList(0, BLE_TRANSFER_SIZE)))
+                writePacket.add(ArrayList(tempPacket.subList(BLE_TRANSFER_SIZE, BLE_TRANSFER_SIZE * 2)))
+                writePacket.add(ArrayList(tempPacket.subList(BLE_TRANSFER_SIZE * 2, BLE_TRANSFER_SIZE * 2 + MCU_PACKET_SIZE)))
+                tempPacket.clear()
+            }
+            // N write operation
+            else if(sourceDataIndex == sourceData.size - 1)
+            {
+                if(tempPacket.size % MCU_PACKET_SIZE != 0) dummySize = MCU_PACKET_SIZE - (tempPacket.size % MCU_PACKET_SIZE) - CRC_SIZE - 1
+                else dummySize = 0
+                // Generate CRC32 value
+                for(i in 0 until dummySize)
+                {
+                    tempPacket.add(0xFF.toByte())
+                }
+                crcBytes = generateCRC32(tempPacket)
+                tempPacket.addAll(0, crcBytes)
+                tempPacket.add(0, MCU_WRITE)
+                
+                // Assign to writePacket
+                if(tempPacket.size <= BLE_TRANSFER_SIZE)
+                {
+                    writePacket.add(ArrayList(tempPacket.subList(0, tempPacket.size)))
+                }
+                else if(tempPacket.size > BLE_TRANSFER_SIZE && tempPacket.size <= BLE_TRANSFER_SIZE * 2 - CRC_SIZE - 1)
+                {
+                    writePacket.add(ArrayList(tempPacket.subList(0, BLE_TRANSFER_SIZE)))
+                    writePacket.add(ArrayList(tempPacket.subList(BLE_TRANSFER_SIZE, tempPacket.size)))
+                }
+                else if(tempPacket.size > BLE_TRANSFER_SIZE * 2 - CRC_SIZE - 1)
+                {
+                    writePacket.add(ArrayList(tempPacket.subList(0, BLE_TRANSFER_SIZE)))
+                    writePacket.add(ArrayList(tempPacket.subList(BLE_TRANSFER_SIZE, BLE_TRANSFER_SIZE * 2)))
+                    writePacket.add(ArrayList(tempPacket.subList(BLE_TRANSFER_SIZE * 2, tempPacket.size)))
+                }
+                tempPacket.clear()
+            }
+            
+        }
+
+
+//        // first packet
+//        packet[dataInPacket++] = MCU_WRITE
+//
+//        for((sourceDataIndex, byteValue) in sourceData.withIndex())
+//        {
+//            packet[dataInPacket++] = byteValue
+//
+//            if(dataInPacket % BLE_TRANSFER_SIZE == 0)
+//            {
+//                writePacket.add(packet)
+//
+//                // Initialize the packet
+//                if(sourceDataIndex < sourceData.size)
+//                {
+//                    packet = ArrayList<Byte>(List(BLE_TRANSFER_SIZE) { 0xFF.toByte() })
+//                    dataInPacket = 0
+//                    packet[dataInPacket++] = MCU_WRITE
+//                }
+//            }
+//        }
+        
+        return writePacket
     }
     
     private fun getReceivedData(): ArrayList<Byte>
@@ -396,8 +554,7 @@ object McuProtocol
     {
         for(i in 0 until times)
         {
-            if(waitCharacteristicChanged(waitingNotificationTime))
-                tempBuffer.addAll(receivedBuffer)
+            if(waitCharacteristicChanged(waitingNotificationTime)) tempBuffer.addAll(receivedBuffer)
             else
             {
                 errorCode = BLE_TIME_OUT
@@ -527,46 +684,10 @@ object McuProtocol
         return builder.toString()
     }
     
-    
     fun getErrorCode(): Byte
     {
         return errorCode
     }
-    
-
-    
-    private fun buildWritePacket(sourceData: ByteArray): ArrayList<ArrayList<Byte>>
-    {
-        val writePacket: ArrayList<ArrayList<Byte>> = ArrayList()
-        var packet = ArrayList<Byte>(List(BLE_TRANSFER_SIZE) { 0xFF.toByte() })
-        var dataInPacket = 0
-        var chkSum = 0
-        
-        // first packet
-        packet[dataInPacket++] = MCU_WRITE
-        
-        for((sourceDataIndex, byteValue) in sourceData.withIndex())
-        {
-            packet[dataInPacket++] = byteValue
-            
-            if(dataInPacket % BLE_TRANSFER_SIZE == 0)
-            {
-                writePacket.add(packet)
-                
-                // Initialize the packet
-                if(sourceDataIndex < sourceData.size)
-                {
-                    packet = ArrayList<Byte>(List(BLE_TRANSFER_SIZE) { 0xFF.toByte() })
-                    dataInPacket = 0
-                    packet[dataInPacket++] = MCU_WRITE
-                }
-            }
-        }
-        
-        return writePacket
-    }
-    
-
     
     private fun buildNBytesPacket(payload: ByteArray): ByteArray
     {
@@ -576,7 +697,7 @@ object McuProtocol
             length = length shl 8 or (element.toInt() and 0xFF)
         }
         
-        return ByteArray(length) { i -> i.toByte() }
+        return ByteArray(length) { i -> (i % 256).toByte() }
     }
     
 }
