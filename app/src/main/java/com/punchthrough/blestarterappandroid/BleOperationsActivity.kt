@@ -252,9 +252,6 @@ class BleOperationsActivity : AppCompatActivity()
                     if(isNotBlank() && isNotEmpty())
                     {
                         val bytes = hexToBytes()
-//                        log("Writing to ${characteristic.uuid}: ${bytes.toHexString()}")
-                        
-                        
                         if(radioButtonMCURead.isChecked)
                         {
                             // Start MCU Read
@@ -274,12 +271,10 @@ class BleOperationsActivity : AppCompatActivity()
                         else
                         {
                             editTextDataLength.visibility = View.INVISIBLE
-                            
                             // Start MCU Write
                             CoroutineScope(Dispatchers.Main).launch {
                                 McuProtocol.write(device, characteristic, bytes)
                             }
-                            
                         }
                     }
                     else
