@@ -27,6 +27,7 @@ import com.punchthrough.blestarterappandroid.ble.ConnectionManager.isConnected
 import com.punchthrough.blestarterappandroid.ble.isWritable
 import com.punchthrough.blestarterappandroid.ble.isWritableWithoutResponse
 import kotlinx.coroutines.delay
+import kotlinx.coroutines.withTimeout
 import timber.log.Timber
 import java.text.SimpleDateFormat
 import java.util.Date
@@ -36,34 +37,35 @@ import java.util.zip.CRC32
 object McuProtocol
 {
     // Size
-    private const val MCU_BUFFER_SIZE: Int = 1024   // device data buffer size
+    private const val MCU_BUFFER_SIZE: Int = 1024
     private const val MCU_PACKET_SIZE: Int = 64
     private const val BLE_TRANSFER_SIZE: Int = 512
     private const val CRC_SIZE: Int = 4
-    private const val WRITE_CMD_SIZE: Int = 7
+    private const val STATUS_SIZE: Int = 1
+    private var WRITE_CMD_SIZE: Int = 7
     
     // ------------------------------------------- MCU Protocol Defined -------------------------------------------- //
-    // Control Byte
-    private const val MCU_READ: Byte = 0x04
-    private const val MCU_WRITE: Byte = 0x00
-    private const val MCU_CHECK: Byte = 0x10
+    // MCU Control Byte
+    private const val MCU_READ = 0x04
+    private const val MCU_WRITE = 0x00
+    private const val MCU_CHECK = 0x10
+    private const val API_CRC_ERROR = 0x20
     
     // MCU State
     const val MCU_STATE_OK = 0x00
     private const val MCU_STATE_BUSY = 0x01
-    private const val MCU_STATE_CRC_ERROR = 0x02
     private const val MCU_STATE_CMD_ERROR = 0x10
+    private const val MCU_STATE_CRC_ERROR = 0x20
     
     // ------------------------------------------------------------------------------------------------------------- //
     private const val BLE_WRITE_ERROR = 0x100
     private const val BLE_READ_ERROR = 0x200
     private const val BLE_TIME_OUT = 0x400
     private const val MCU_PACKET_SIZE_UNMATCHED = 0x800
-    private const val API_CRC_ERROR = 0x1000
     
     // ---------------------------------------------- Parameter ---------------------------------------------------- //
     private var receivedBuffer: ArrayList<Byte> = ArrayList<Byte>()
-    private var isTrigger: Boolean = false
+    private var receivedNotification: Boolean = false
     private var requestedDataLength: Int = 0
     private var errorCode = 0
     
@@ -89,6 +91,9 @@ object McuProtocol
     {
         device = bluetoothDevice
         characteristic = bluetoothGattCharacteristic
+        retryTimes_MCU_BUSY = 0
+        retryTimes_CRC_ERROR = 0
+        setNotificationTrigger(false)
         val writeType = when
         {
             characteristic.isWritable() -> BluetoothGattCharacteristic.WRITE_TYPE_DEFAULT
@@ -106,10 +111,7 @@ object McuProtocol
         
         if(device.isConnected())
         {
-            // Test Data
-            val payload = buildNBytesPacket(payload)
-            
-            val writePacket = buildWritePackets(payload)
+            val writePacket = buildWritePackets(buildTestPacket(payload)) //TODO: Remove Test Data
             val packetsPerTransfer = 3
             // Check status
             do
@@ -119,12 +121,13 @@ object McuProtocol
             }
             while(shouldRetry)
             
-            // Write data
-            log("MCU Write is executing. Input bytes: ${payload.size}")
+            // Write packet
+//            log("MCU Write is executing. Input bytes: ${payload.size}") //TODO: Mark
+            remainingBytes = 0
+            packetIndex = 0
             for(data in writePacket) remainingBytes += data.size
             while(packetIndex < writePacket.size)
             {
-                // Write packet
                 do
                 {
                     if(!sendWritePacket(writePacket, packetsPerTransfer)) return false
@@ -151,10 +154,9 @@ object McuProtocol
     {
         device = bluetoothDevice
         characteristic = bluetoothGattCharacteristic
-        val data = ArrayList<Byte>()
-        // Build ReadCMD ByteArray
-        val readCMD = organizeReadCMDPacket()
-        
+        retryTimes_MCU_BUSY = 0
+        retryTimes_CRC_ERROR = 0
+        setNotificationTrigger(false)
         val writeType = when
         {
             characteristic.isWritable() -> BluetoothGattCharacteristic.WRITE_TYPE_DEFAULT
@@ -171,6 +173,9 @@ object McuProtocol
         }
         if(device.isConnected())
         {
+            val data = ArrayList<Byte>()
+            val readCMD = organizeReadCMDPacket()
+            
             // Check status
             do
             {
@@ -224,13 +229,12 @@ object McuProtocol
     {
         val checkPacket = ArrayList<Byte>(List(MCU_PACKET_SIZE - CRC_SIZE - 1) { 0xFF.toByte() })   // Control Byte: 1 byte
         val crcBytes = generateCRC32(checkPacket)
-        
         // Put CRC32 Bytes after Control Byte
         checkPacket.addAll(0, crcBytes)
-        checkPacket.add(0, MCU_CHECK)
+        checkPacket.add(0, MCU_CHECK.toByte())
         
         if(!sendPacket(checkPacket.toByteArray(), "CheckPacket")) return false
-        
+        delay(bleOperationInterval)
         return true
     }
     
@@ -243,7 +247,7 @@ object McuProtocol
             if(!sendPacket(packet[packetIndex++].toByteArray(), "WritePacket")) return false
         }
         while(packetIndex % packetsPerTransfer != 0 && packetIndex != packet.size)
-        
+        delay(bleOperationInterval)
         return true
     }
     
@@ -257,10 +261,10 @@ object McuProtocol
         }
         val crcBytes = generateCRC32(readINFO)
         readINFO.addAll(0, crcBytes)
-        readINFO.add(0, MCU_READ)
+        readINFO.add(0, MCU_READ.toByte())
         
         if(!sendPacket(readINFO.toByteArray(), "ReadInfoPacket")) return false
-        
+        delay(bleOperationInterval)
         return true
     }
     
@@ -276,12 +280,12 @@ object McuProtocol
         return true
     }
     
-    private suspend fun organizeReadCMDPacket(): ByteArray
+    private fun organizeReadCMDPacket(): ByteArray
     {
         val readCMD = ArrayList<Byte>(List(MCU_PACKET_SIZE - CRC_SIZE - 1) { 0xFF.toByte() })   // Control Byte: 1 byte
         val crcBytes = generateCRC32(readCMD)
         readCMD.addAll(0, crcBytes)
-        readCMD.add(0, MCU_READ)
+        readCMD.add(0, MCU_READ.toByte())
         return readCMD.toByteArray()
     }
     
@@ -435,127 +439,6 @@ object McuProtocol
         }
     }
     
-    /*
-        private suspend fun verifyStatusPacket(): Boolean
-        {
-            var retry = false
-            if(waitCharacteristicChanged(waitingNotificationTime))
-            {
-                // DEBUG
-    //            log("ReceivedStatusPacket, ${receivedBuffer.toHexString()}")
-                
-                // check packet size
-                if(receivedBuffer.size % MCU_PACKET_SIZE != 0)
-                {
-                    errorCode = errorCode or MCU_PACKET_SIZE_UNMATCHED
-                    log("[Error] MCU packet size is not multiple of $MCU_PACKET_SIZE")
-                    retry = false
-                }
-                
-                // check CRC32
-                if(!verifyCRC32(receivedBuffer))
-                {
-                    errorCode = errorCode or API_CRC_ERROR
-                    log("[Warning] CRC32 is incorrect from API, times : ${retryTimes_CRC_ERROR++}")
-                    retry = retryTimes_CRC_ERROR < maxRetryTimes_CRC_ERROR
-                }
-                
-                val statusByte = receivedBuffer[CRC_SIZE].toInt()
-                
-                if(statusByte == MCU_STATE_OK)
-                {
-                    errorCode = MCU_STATE_OK
-                    retryTimes_MCU_BUSY = 0
-                    retryTimes_CRC_ERROR = 0
-                    retry = false
-                }
-                else
-                {
-                    var unexpectedError = true
-                    
-                    if(statusByte and MCU_STATE_BUSY != 0)
-                    {
-                        log("[Warning] MCU is busy, times : ${retryTimes_MCU_BUSY++}")
-                        errorCode = errorCode or MCU_STATE_BUSY
-                        retry = retryTimes_MCU_BUSY < maxRetryTimes_MCU_BUSY
-                        unexpectedError = false
-                    }
-                    if(statusByte and MCU_STATE_CRC_ERROR != 0)
-                    {
-                        log("[Warning] CRC32 is incorrect from MCU, times : ${retryTimes_CRC_ERROR++}")
-                        errorCode = errorCode or MCU_STATE_CRC_ERROR
-                        retry = retryTimes_CRC_ERROR < maxRetryTimes_CRC_ERROR
-                        unexpectedError = false
-                    }
-                    if(statusByte and MCU_STATE_CMD_ERROR != 0)
-                    {
-                        log("[Error] MCU command error")
-                        errorCode = errorCode or MCU_STATE_CMD_ERROR
-                        retry = false
-                        unexpectedError = false
-                    }
-                    if(unexpectedError)
-                    {
-                        errorCode = receivedBuffer[CRC_SIZE].toInt()
-                        log("[Error] Unexpected error! Error code: ${String.format("%02X", errorCode)}")
-                        retry = false
-                    }
-                }
-                
-                
-    /*
-                when(receivedBuffer[CRC_SIZE].toInt())
-                {
-                    MCU_STATE_OK ->
-                    {
-                        errorCode = MCU_STATE_OK
-                        retryTimes_MCU_BUSY = 0
-                        retryTimes_CRC_ERROR = 0
-                        retry = false
-                    }
-                    
-                    MCU_STATE_BUSY ->
-                    {
-                        errorCode = errorCode or MCU_STATE_BUSY
-                        log("[Warning] MCU is busy, times : ${retryTimes_MCU_BUSY++}")
-                        retry = retryTimes_MCU_BUSY < maxRetryTimes_MCU_BUSY
-                    }
-                    
-                    MCU_STATE_CRC_ERROR ->
-                    {
-                        errorCode = errorCode or MCU_STATE_CRC_ERROR
-                        log("[Warning] CRC32 is incorrect from MCU, times : ${retryTimes_CRC_ERROR++}")
-                        retry = retryTimes_CRC_ERROR < maxRetryTimes_CRC_ERROR
-                    }
-                    
-                    MCU_STATE_CMD_ERROR ->
-                    {
-                        errorCode = errorCode or MCU_STATE_CMD_ERROR
-                        log("[Error] MCU command is error")
-                        retry = false
-                    }
-                    
-                    else ->
-                    {
-                        errorCode = receivedBuffer[CRC_SIZE].toInt()
-                        log("[Error] Unexpected error! Error code: ${String.format("%02X", errorCode)}")
-                        retry = false
-                    }
-                }
-    */
-            
-            }
-            else
-            {
-                errorCode = BLE_TIME_OUT
-                log("[Error] BLE Time out, no response")
-                retry = false
-            }
-            
-            return retry
-        }
-     */
-    
     private suspend fun checkMcuState(): Boolean
     {
         if(!sendCheckPacket()) return false
@@ -616,7 +499,7 @@ object McuProtocol
     private fun buildWritePackets(sourceData: ByteArray): ArrayList<ArrayList<Byte>>
     {
         val writePacket: ArrayList<ArrayList<Byte>> = ArrayList()
-        var tempPacket = ArrayList<Byte>()
+        val tempPacket = ArrayList<Byte>()
         var isFirstPacket = true
         
         for((sourceDataIndex, byteData) in sourceData.withIndex())
@@ -657,7 +540,7 @@ object McuProtocol
         // Generate CRC32 value
         val crcBytes: ArrayList<Byte> = generateCRC32(tempPacket)
         tempPacket.addAll(0, crcBytes)
-        tempPacket.add(0, MCU_WRITE)
+        tempPacket.add(0, MCU_WRITE.toByte())
         
         for(dataIndex in 0 until tempPacket.size step BLE_TRANSFER_SIZE)
         {
@@ -670,31 +553,31 @@ object McuProtocol
     
     private suspend fun getReceivedData(data: ArrayList<Byte>): Boolean
     {
-        val remainingDataLength = requestedDataLength - data.size
+        remainingBytes = requestedDataLength - data.size
         val tempBuffer = ArrayList<Byte>()
         var dummySize = 0
         var maxDataLength = 0
         
-        log("Remaining data length: $remainingDataLength.")
+        log("Remaining data length: $remainingBytes.")
         // Remaining data length > 1020
-        if(remainingDataLength > MCU_BUFFER_SIZE - CRC_SIZE)
+        if(remainingBytes > MCU_BUFFER_SIZE - CRC_SIZE - STATUS_SIZE)
         {
             //// Get data via 3 notifications
             if(!getDataInSegments(tempBuffer, 3))
             {
                 return shouldRetry
             }
-            maxDataLength = if(remainingDataLength > MCU_BUFFER_SIZE) MCU_BUFFER_SIZE else remainingDataLength
+            maxDataLength = if(remainingBytes > MCU_BUFFER_SIZE) MCU_BUFFER_SIZE else remainingBytes
         }
         // 508 < Remaining data length <= 1020
-        else if(((BLE_TRANSFER_SIZE - CRC_SIZE) < remainingDataLength) && (remainingDataLength <= (MCU_BUFFER_SIZE - CRC_SIZE)))
+        else if(((BLE_TRANSFER_SIZE - CRC_SIZE - STATUS_SIZE) < remainingBytes) && (remainingBytes <= (MCU_BUFFER_SIZE - CRC_SIZE - STATUS_SIZE)))
         {
             //// Get data via 2 notifications
             if(!getDataInSegments(tempBuffer, 2))
             {
                 return shouldRetry
             }
-            maxDataLength = remainingDataLength
+            maxDataLength = remainingBytes
         }
         // Remaining data length <= 508
         else
@@ -704,16 +587,16 @@ object McuProtocol
             {
                 return shouldRetry
             }
-            maxDataLength = remainingDataLength
+            maxDataLength = remainingBytes
         }
         
         // Check CRC32
         if(verifyCRC32(tempBuffer))
         {
-            if((maxDataLength + CRC_SIZE) % MCU_PACKET_SIZE != 0) dummySize = MCU_PACKET_SIZE - ((maxDataLength + CRC_SIZE) % MCU_PACKET_SIZE)
+            if((maxDataLength + CRC_SIZE + STATUS_SIZE) % MCU_PACKET_SIZE != 0) dummySize = MCU_PACKET_SIZE - ((maxDataLength + CRC_SIZE + STATUS_SIZE) % MCU_PACKET_SIZE)
             else dummySize = 0
             // Remove dummy and CRC bytes
-            data.addAll(tempBuffer.subList(CRC_SIZE, tempBuffer.size - dummySize))
+            data.addAll(tempBuffer.subList(CRC_SIZE + STATUS_SIZE, tempBuffer.size - dummySize))
             return true
         }
         else
@@ -745,6 +628,7 @@ object McuProtocol
                 }
             }
             tempBuffer.addAll(receivedBuffer)
+            
         }
         
         return true
@@ -752,22 +636,43 @@ object McuProtocol
     
     private suspend fun waitCharacteristicChanged(waitingTime: Long): Boolean
     {
-        val startTime = System.currentTimeMillis()
-        
-        while(!isTrigger)
+        try
         {
-            if(System.currentTimeMillis() - startTime > waitingTime)
-            {
-                break
+            withTimeout(waitingTime) {
+                while(!receivedNotification)
+                {
+                    delay(1)
+                }
             }
-        }
-        
-        if(isTrigger)
-        {
-            isTrigger = false
+            setNotificationTrigger(false)
             return true
         }
-        else return false
+        catch(e: Exception)
+        {
+            // timeout
+            return false
+        }
+    
+    
+//        val startTime = System.currentTimeMillis()
+//
+//        while(!receivedNotification)
+//        {
+//            if(System.currentTimeMillis() - startTime > waitingTime)
+//            {
+//                break
+//            }
+//        }
+//
+//        if(receivedNotification)
+//        {
+//            setNotificationTrigger(false)
+//            return true
+//        }
+//        else // timeout
+//            return false
+//
+//
     }
     
     private fun generateCRC32(data: ArrayList<Byte>): ArrayList<Byte>
@@ -808,7 +713,6 @@ object McuProtocol
         {
             if(crcBytes[i] != receivedCRCBytes[i])
             {
-                errorCode = API_CRC_ERROR
                 return false
             }
         }
@@ -825,7 +729,7 @@ object McuProtocol
     {
         val dateFormatter = SimpleDateFormat("HH:mm:ss", Locale.TAIWAN)
         val formattedMessage = String.format("%s: %s", dateFormatter.format(Date()), message)
-        val textViewLog = activity.findViewById<TextView>(R.id.log_text_view)
+        val textViewLog = McuProtocol.activity.findViewById<TextView>(R.id.log_text_view)
         val scrollViewLog = activity.findViewById<ScrollView>(R.id.log_scroll_view)
         activity.runOnUiThread {
             
@@ -841,9 +745,9 @@ object McuProtocol
         requestedDataLength = length
     }
     
-    fun setTrigger()
+    fun setNotificationTrigger(value: Boolean)
     {
-        isTrigger = true;
+        receivedNotification = value
     }
     
     fun setReceivedData(payload: ArrayList<Byte>)
@@ -875,15 +779,15 @@ object McuProtocol
         return errorCode
     }
     
-    private fun buildNBytesPacket(payload: ByteArray): ByteArray
+    private fun buildTestPacket(payload: ByteArray): ByteArray
     {
-        var length: Int = 0
+        var length = 0
         for(element in payload)
         {
             length = length shl 8 or (element.toInt() and 0xFF)
         }
-        
-        return ByteArray(length) { i -> (i % 256).toByte() }
+        log("MCU Write is executing. Input bytes: $length") // TODO mark
+        return byteArrayOf(*payload, 0xD0.toByte(), 0xD1.toByte(), *ByteArray(length - payload.size - 2) { i -> (i % 256).toByte() })
     }
     
 }

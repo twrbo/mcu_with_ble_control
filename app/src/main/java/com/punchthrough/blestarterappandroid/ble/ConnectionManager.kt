@@ -30,6 +30,8 @@ import android.os.Handler
 import android.os.Looper
 import android.view.View
 import android.widget.ProgressBar
+import android.widget.ScrollView
+import android.widget.TextView
 import androidx.appcompat.app.AppCompatActivity
 import androidx.core.app.ActivityCompat
 import com.punchthrough.blestarterappandroid.BLUETOOTH_CONNECT_PERMISSION_REQUEST_CODE
@@ -37,6 +39,9 @@ import com.punchthrough.blestarterappandroid.BLUETOOTH_SCAN_PERMISSION_REQUEST_C
 import com.punchthrough.blestarterappandroid.R
 import timber.log.Timber
 import java.lang.ref.WeakReference
+import java.text.SimpleDateFormat
+import java.util.Date
+import java.util.Locale
 import java.util.UUID
 import java.util.concurrent.ConcurrentHashMap
 import java.util.concurrent.ConcurrentLinkedQueue
@@ -312,8 +317,8 @@ object ConnectionManager
         
         
         
-        // TODO: Make sure each operation ultimately leads to signalEndOfOperation()
-        // TODO: Refactor this into an BleOperationType abstract or extension function
+        // Make sure each operation ultimately leads to signalEndOfOperation()
+        // Refactor this into an BleOperationType abstract or extension function
         when(operation)
         {
             is Disconnect -> with(operation) {
@@ -680,4 +685,18 @@ object ConnectionManager
     }
     
     fun BluetoothDevice.isConnected() = deviceGattMap.containsKey(this)
+    
+    private fun log(message: String)
+    {
+        val dateFormatter = SimpleDateFormat("HH:mm:ss", Locale.TAIWAN)
+        val formattedMessage = String.format("%s: %s", dateFormatter.format(Date()), message)
+        val textViewLog = activity.findViewById<TextView>(R.id.log_text_view)
+        val scrollViewLog = activity.findViewById<ScrollView>(R.id.log_scroll_view)
+        activity.runOnUiThread {
+            
+            val currentLogText = textViewLog.text
+            textViewLog.text = "$currentLogText\n$formattedMessage"
+            scrollViewLog.post { scrollViewLog.fullScroll(View.FOCUS_DOWN) }
+        }
+    }
 }

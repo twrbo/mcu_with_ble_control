@@ -123,6 +123,7 @@ class BleOperationsActivity : AppCompatActivity()
         
         // Pass activity
         McuProtocol.initActivity(this)
+//        ConnectionManager.initActivity(this)
     }
     
     override fun onDestroy()
@@ -321,7 +322,7 @@ class BleOperationsActivity : AppCompatActivity()
                 if(characteristic.value != null)
                 {
                     McuProtocol.setReceivedData(characteristic.value.toArrayList())
-                    McuProtocol.setTrigger()
+                    McuProtocol.setNotificationTrigger(true)
                 }
             }
             
