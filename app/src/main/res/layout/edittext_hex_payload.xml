@@ -22,8 +22,8 @@
 
     <RadioGroup
         android:layout_width="match_parent"
-        android:orientation="horizontal"
-        android:layout_height="wrap_content">
+        android:layout_height="wrap_content"
+        android:orientation="horizontal">
 
         <RadioButton
             android:id="@+id/radioButton_write"
@@ -41,25 +41,51 @@
             android:text="MCU Read" />
     </RadioGroup>
 
-
-    <EditText
-        android:id="@+id/editText_payload"
+    <com.google.android.material.textfield.TextInputLayout
+        android:id="@+id/layout_payload"
         android:layout_width="match_parent"
         android:layout_height="wrap_content"
-        android:digits="0123456789abcdefABCDEF"
-        android:hint="Enter payload in hex (0-9, a-f, A-F)"
-        android:importantForAutofill="no"
-        android:inputType="text" />
+        android:hint="Payload (Enter in hex)">
 
-    <EditText
-        android:id="@+id/editText_dataLength"
-        android:visibility="invisible"
+        <EditText
+            android:id="@+id/editText_payload"
+            android:layout_width="match_parent"
+            android:layout_height="wrap_content"
+            android:digits="0123456789abcdefABCDEF"
+            android:importantForAutofill="no"
+            android:inputType="text" />
+    </com.google.android.material.textfield.TextInputLayout>
+
+    <com.google.android.material.textfield.TextInputLayout
+        android:id="@+id/layout_dataLength"
         android:layout_width="match_parent"
         android:layout_height="wrap_content"
-        android:digits="0123456789"
-        android:hint="Enter data length in decimal"
-        android:importantForAutofill="no"
-        android:inputType="text" />
+        android:hint="Request Date Length (Enter in decimal)"
+        android:visibility="gone">
 
+        <EditText
+            android:id="@+id/editText_dataLength"
+            android:layout_width="match_parent"
+            android:layout_height="wrap_content"
+            android:digits="0123456789"
+            android:importantForAutofill="no"
+            android:inputType="text" />
+    </com.google.android.material.textfield.TextInputLayout>
+
+    <com.google.android.material.textfield.TextInputLayout
+        android:id="@+id/layout_opcodeLength"
+        android:layout_width="match_parent"
+        android:layout_height="wrap_content"
+        android:hint="OpCode Length (Enter in decimal) (Default: 7)">
+
+        <EditText
+            android:id="@+id/editText_opcodeLength"
+            android:layout_width="match_parent"
+            android:layout_height="wrap_content"
+            android:digits="0123456789"
+            android:importantForAutofill="no"
+            android:inputType="text"
+            android:text="7" />
+    </com.google.android.material.textfield.TextInputLayout>
 
 </LinearLayout>

@@ -36,6 +36,7 @@ import androidx.core.app.ActivityCompat
 import androidx.recyclerview.widget.LinearLayoutManager
 import androidx.recyclerview.widget.RecyclerView
 import androidx.recyclerview.widget.SimpleItemAnimator
+import com.google.android.material.textfield.TextInputLayout
 import com.punchthrough.blestarterappandroid.ble.ConnectionEventListener
 import com.punchthrough.blestarterappandroid.ble.ConnectionManager
 import com.punchthrough.blestarterappandroid.ble.isIndicatable
@@ -221,14 +222,17 @@ class BleOperationsActivity : AppCompatActivity()
     private fun showWritePayloadDialog(characteristic: BluetoothGattCharacteristic)
     {
         val view = layoutInflater.inflate(R.layout.edittext_hex_payload, null)
-        val editTextPayload = view.findViewById<EditText>(R.id.editText_payload)
         val radioButtonMCURead = view.findViewById<RadioButton>(R.id.radioButton_read)
-        val editTextDataLength = view.findViewById<EditText>(R.id.editText_dataLength)
+        val radioButtonMCUWrite = view.findViewById<RadioButton>(R.id.radioButton_write)
+        val layoutPayload = view.findViewById<TextInputLayout>(R.id.layout_payload)
+        val layoutDataLength = view.findViewById<TextInputLayout>(R.id.layout_dataLength)
+        val layoutOpcodeLength = view.findViewById<TextInputLayout>(R.id.layout_opcodeLength)
         
         // 增加 radioButtonMCURead 的點選事件監聽器
         radioButtonMCURead.setOnCheckedChangeListener { _, isChecked ->
             // 根據 isChecked 決定是否顯示 editTextDataLength
-            editTextDataLength.visibility = if(isChecked) View.VISIBLE else View.GONE
+            layoutDataLength.visibility = if(isChecked) View.VISIBLE else View.GONE
+            layoutOpcodeLength.visibility = if(isChecked) View.GONE else View.VISIBLE
         }
         
         // Enable notification
@@ -249,19 +253,22 @@ class BleOperationsActivity : AppCompatActivity()
                 // Clear log
                 log_text_view.text=""
                 ConnectionManager.setProgressBar(true)
-                with(editTextPayload.text.toString()) {
+                val payloadText = view.findViewById<EditText>(R.id.editText_payload).text.toString()
+                with(payloadText) {
                     if(isNotBlank() && isNotEmpty())
                     {
-                        val bytes = hexToBytes()
+                        val payload = hexToBytes()
+                        val requestDataLengthText = view.findViewById<EditText>(R.id.editText_dataLength).text.toString()
+                        val opcodeLengthText = view.findViewById<EditText>(R.id.editText_opcodeLength).text.toString()
+                        
                         if(radioButtonMCURead.isChecked)
                         {
                             // Start MCU Read
-                            val dataLengthText = editTextDataLength.text.toString()
-                            if(dataLengthText.isNotBlank() && dataLengthText.isNotEmpty())
+                            if(requestDataLengthText.isNotBlank())
                             {
-                                McuProtocol.setDataLength(dataLengthText.toInt())
+                                McuProtocol.setRequestDataLength(requestDataLengthText.toInt())
                                 CoroutineScope(Dispatchers.Main).launch {
-                                    McuProtocol.read(device, characteristic, bytes)
+                                    McuProtocol.read(device, characteristic, payload)
                                 }
                             }
                             else
@@ -269,24 +276,31 @@ class BleOperationsActivity : AppCompatActivity()
                                 log("Please enter the data length.")
                             }
                         }
-                        else
+                        else if(radioButtonMCUWrite.isChecked)
                         {
-                            editTextDataLength.visibility = View.INVISIBLE
                             // Start MCU Write
-                            CoroutineScope(Dispatchers.Main).launch {
-                                McuProtocol.write(device, characteristic, bytes)
+                            if(opcodeLengthText.isNotBlank())
+                            {
+                                McuProtocol.setOpCodeLength(opcodeLengthText.toInt())
+                                CoroutineScope(Dispatchers.Main).launch {
+                                    McuProtocol.write(device, characteristic, payload)
+                                }
+                            }
+                            else
+                            {
+                                log("Please enter the data length.")
                             }
                         }
                     }
                     else
                     {
-                        log("Please enter a hex payload to write to ${characteristic.uuid}")
+                        log("Please enter the payload to write to ${characteristic.uuid}")
                     }
                 }
             }
             negativeButton("No") {}
         }.show()
-        editTextPayload.showKeyboard()
+//        payloadText.showKeyboard()
         
         if(McuProtocol.getErrorCode() != McuProtocol.MCU_STATE_OK)
             log("The MCU state is not OK. ErrorCode: ${McuProtocol.getErrorCode()}")
