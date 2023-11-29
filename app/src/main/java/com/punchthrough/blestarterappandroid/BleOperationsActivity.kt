@@ -224,9 +224,12 @@ class BleOperationsActivity : AppCompatActivity()
         val view = layoutInflater.inflate(R.layout.edittext_hex_payload, null)
         val radioButtonMCURead = view.findViewById<RadioButton>(R.id.radioButton_read)
         val radioButtonMCUWrite = view.findViewById<RadioButton>(R.id.radioButton_write)
+        val editTextPayload = view.findViewById<EditText>(R.id.editText_payload)
         val layoutPayload = view.findViewById<TextInputLayout>(R.id.layout_payload)
         val layoutDataLength = view.findViewById<TextInputLayout>(R.id.layout_dataLength)
         val layoutOpcodeLength = view.findViewById<TextInputLayout>(R.id.layout_opcodeLength)
+        val editTextOpcodeLength = view.findViewById<EditText>(R.id.editText_opcodeLength)
+        editTextOpcodeLength.setText(McuProtocol.getOpCodeLength().toString())
         
         // 增加 radioButtonMCURead 的點選事件監聽器
         radioButtonMCURead.setOnCheckedChangeListener { _, isChecked ->
@@ -253,14 +256,12 @@ class BleOperationsActivity : AppCompatActivity()
                 // Clear log
                 log_text_view.text=""
                 ConnectionManager.setProgressBar(true)
-                val payloadText = view.findViewById<EditText>(R.id.editText_payload).text.toString()
-                with(payloadText) {
+                
+                with(editTextPayload.text.toString()) {
                     if(isNotBlank() && isNotEmpty())
                     {
                         val payload = hexToBytes()
                         val requestDataLengthText = view.findViewById<EditText>(R.id.editText_dataLength).text.toString()
-                        val opcodeLengthText = view.findViewById<EditText>(R.id.editText_opcodeLength).text.toString()
-                        
                         if(radioButtonMCURead.isChecked)
                         {
                             // Start MCU Read
@@ -279,9 +280,9 @@ class BleOperationsActivity : AppCompatActivity()
                         else if(radioButtonMCUWrite.isChecked)
                         {
                             // Start MCU Write
-                            if(opcodeLengthText.isNotBlank())
+                            if(editTextOpcodeLength.text.toString().isNotBlank())
                             {
-                                McuProtocol.setOpCodeLength(opcodeLengthText.toInt())
+                                McuProtocol.setOpCodeLength(editTextOpcodeLength.text.toString().toInt())
                                 CoroutineScope(Dispatchers.Main).launch {
                                     McuProtocol.write(device, characteristic, payload)
                                 }
@@ -300,10 +301,10 @@ class BleOperationsActivity : AppCompatActivity()
             }
             negativeButton("No") {}
         }.show()
-//        payloadText.showKeyboard()
+        editTextPayload.showKeyboard()
         
-        if(McuProtocol.getErrorCode() != McuProtocol.MCU_STATE_OK)
-            log("The MCU state is not OK. ErrorCode: ${McuProtocol.getErrorCode()}")
+//        if(McuProtocol.getErrorCode() != McuProtocol.MCU_STATE_OK)
+//            log("The MCU state is not OK. ErrorCode: ${McuProtocol.getErrorCode()}")
     }
     
     val connectionEventListener by lazy {

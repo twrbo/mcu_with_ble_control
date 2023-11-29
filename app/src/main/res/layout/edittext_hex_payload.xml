@@ -85,7 +85,7 @@
             android:digits="0123456789"
             android:importantForAutofill="no"
             android:inputType="text"
-            android:text="7" />
+            android:text="" />
     </com.google.android.material.textfield.TextInputLayout>
 
 </LinearLayout>

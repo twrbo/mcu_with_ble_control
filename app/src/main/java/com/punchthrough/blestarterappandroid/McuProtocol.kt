@@ -49,10 +49,10 @@ object McuProtocol
     private const val MCU_READ = 0x04
     private const val MCU_WRITE = 0x00
     private const val MCU_CHECK = 0x10
-    private const val API_CRC_ERROR = 0x20
+    private const val CRC_ERROR = 0x20
     
     // MCU State
-    const val MCU_STATE_OK = 0x00
+    private const val MCU_STATE_OK = 0x00
     private const val MCU_STATE_BUSY = 0x01
     private const val MCU_STATE_CMD_ERROR = 0x10
     private const val MCU_STATE_CRC_ERROR = 0x20
@@ -62,6 +62,7 @@ object McuProtocol
     private const val BLE_READ_ERROR = 0x200
     private const val BLE_TIME_OUT = 0x400
     private const val MCU_PACKET_SIZE_UNMATCHED = 0x800
+    private const val API_CRC_ERROR = 0x1000
     
     // ---------------------------------------------- Parameter ---------------------------------------------------- //
     private var receivedBuffer: ArrayList<Byte> = ArrayList<Byte>()
@@ -89,10 +90,12 @@ object McuProtocol
     private lateinit var characteristic: BluetoothGattCharacteristic
     // ------------------------------------------------------------------------------------------------------------ //
     
-    suspend fun write(bluetoothDevice: BluetoothDevice, bluetoothGattCharacteristic: BluetoothGattCharacteristic, payload: ByteArray): Boolean
+    suspend fun write(bluetoothDevice: BluetoothDevice, bluetoothGattCharacteristic: BluetoothGattCharacteristic,
+                      payload: ByteArray): Boolean
     {
         device = bluetoothDevice
         characteristic = bluetoothGattCharacteristic
+        errorCode = 0
         retryTimes_MCU_BUSY = 0
         retryTimes_CRC_ERROR = 0
         remainingBytes = 0
@@ -131,6 +134,7 @@ object McuProtocol
             
             // Write packet
             for(data in writePacket) remainingBytes += data.size
+            
             while(packetIndex < writePacket.size)
             {
                 do
@@ -158,10 +162,12 @@ object McuProtocol
         return false
     }
     
-    suspend fun read(bluetoothDevice: BluetoothDevice, bluetoothGattCharacteristic: BluetoothGattCharacteristic, payload: ByteArray): Boolean
+    suspend fun read(bluetoothDevice: BluetoothDevice, bluetoothGattCharacteristic: BluetoothGattCharacteristic,
+                     payload: ByteArray): Boolean
     {
         device = bluetoothDevice
         characteristic = bluetoothGattCharacteristic
+        errorCode = 0
         retryTimes_MCU_BUSY = 0
         retryTimes_CRC_ERROR = 0
         setNotificationTrigger(false)
@@ -217,7 +223,7 @@ object McuProtocol
                 do
                 {
                     if(!sendReadCMDPacket()) return false
-                    if(!getReceivedData(data)) return false
+                    if(!verifyDataPacket(data)) return false
                     delay(queryInterval)
                 }
                 while(shouldRetry)
@@ -238,7 +244,8 @@ object McuProtocol
     
     private suspend fun sendCheckPacket(): Boolean
     {
-        val checkPacket = ArrayList<Byte>(List(MCU_PACKET_SIZE - CRC_SIZE - 1) { 0xFF.toByte() })   // Control Byte: 1 byte
+        val checkPacket = ArrayList<Byte>(
+            List(MCU_PACKET_SIZE - CRC_SIZE - 1) { 0xFF.toByte() })   // Control Byte: 1 byte
         val crcBytes = generateCRC32(checkPacket)
         // Put CRC32 Bytes after Control Byte
         checkPacket.addAll(0, crcBytes)
@@ -251,10 +258,11 @@ object McuProtocol
     
     private suspend fun sendWritePacket(packet: ArrayList<ArrayList<Byte>>, packetsPerTransfer: Int): Boolean
     {
+        var transactionTimes = 0
         // Add control byte for MCU retry mechanism
-        if(errorCode and API_CRC_ERROR != 0) packet[packetIndex][0] = packet[packetIndex][0] or API_CRC_ERROR.toByte()
-        
-        do
+        if(errorCode and API_CRC_ERROR != 0) packet[packetIndex][0] = packet[packetIndex][0] or CRC_ERROR.toByte()
+    
+        while(transactionTimes != packetsPerTransfer && packetIndex != packet.size)
         {
             log("Remaining bytes: $remainingBytes")
             remainingBytes -= packet[packetIndex].size
@@ -264,8 +272,9 @@ object McuProtocol
                 errorCode = BLE_WRITE_ERROR
                 return false
             }
+            
+            transactionTimes++
         }
-        while(packetIndex % packetsPerTransfer != 0 && packetIndex != packet.size)
         delay(bleOperationInterval)
         return true
     }
@@ -298,11 +307,10 @@ object McuProtocol
         return true
     }
     
-    
     private suspend fun sendPacket(packet: ByteArray, packetName: String): Boolean
     {
         // Add control byte for MCU retry mechanism
-        if(errorCode and API_CRC_ERROR != 0) packet[0] = packet[0] or API_CRC_ERROR.toByte()
+        if(errorCode and API_CRC_ERROR != 0) packet[0] = packet[0] or CRC_ERROR.toByte()
         
         if(!ConnectionManager.writeCharacteristic(device, characteristic, packet))
         {
@@ -330,6 +338,7 @@ object McuProtocol
                 shouldRetry = false
             }
             
+            
             // check CRC32
             if(!verifyCRC32(receivedBuffer))
             {
@@ -337,6 +346,7 @@ object McuProtocol
                 errorCode = errorCode or API_CRC_ERROR
                 shouldRetry = retryTimes_CRC_ERROR < maxRetryTimes_CRC_ERROR
                 if(!shouldRetry) log("[Error] Max retries exceeded!")
+                return shouldRetry
             }
             
             val statusByte = receivedBuffer[CRC_SIZE].toInt()
@@ -390,13 +400,17 @@ object McuProtocol
     
     private suspend fun verifyStatusPacket(receivedBuffer: ArrayList<Byte>): Boolean
     {
-        // check packet size
+        // For verifyDataPacket calling, just verify the receivedBuffer
+        // 1. No waiting mechanism
+        // 2. return statement is different from verifyStatusPacket()
+        
         if(receivedBuffer.size % MCU_PACKET_SIZE != 0)
         {
             log("[Error] MCU packet size is not multiple of $MCU_PACKET_SIZE")
             errorCode = errorCode or MCU_PACKET_SIZE_UNMATCHED
             shouldRetry = false
         }
+    
         
         // check CRC32
         if(!verifyCRC32(receivedBuffer))
@@ -405,6 +419,7 @@ object McuProtocol
             errorCode = errorCode or API_CRC_ERROR
             shouldRetry = retryTimes_CRC_ERROR < maxRetryTimes_CRC_ERROR
             if(!shouldRetry) log("[Error] Max retries exceeded!")
+            return false
         }
         
         val statusByte = receivedBuffer[CRC_SIZE].toInt()
@@ -446,7 +461,7 @@ object McuProtocol
             }
         }
         
-        return shouldRetry
+        return false
     }
     
     private suspend fun verifyDataPacket(): Boolean
@@ -459,9 +474,19 @@ object McuProtocol
             // check packet size
             if(receivedBuffer.size % MCU_PACKET_SIZE != 0)
             {
-                errorCode = errorCode or MCU_PACKET_SIZE_UNMATCHED
                 log("[Error] MCU packet size is not multiple of $MCU_PACKET_SIZE")
+                errorCode = errorCode or MCU_PACKET_SIZE_UNMATCHED
                 shouldRetry = false
+            }
+            
+            // check CRC32
+            if(!verifyCRC32(receivedBuffer))
+            {
+                log("[Warning] CRC32 is incorrect from API, times : ${++retryTimes_CRC_ERROR}")
+                errorCode = errorCode or API_CRC_ERROR
+                shouldRetry = retryTimes_CRC_ERROR < maxRetryTimes_CRC_ERROR
+                if(!shouldRetry) log("[Error] Max retries exceeded!")
+                return false
             }
             
             val statusByte = receivedBuffer[CRC_SIZE].toInt()
@@ -478,23 +503,24 @@ object McuProtocol
             {
                 if(statusByte and MCU_STATE_BUSY != 0)
                 {
-                    errorCode = errorCode or MCU_STATE_BUSY
                     log("[Warning] MCU is busy, times : ${++retryTimes_MCU_BUSY}")
+                    errorCode = errorCode or MCU_STATE_BUSY
                     shouldRetry = retryTimes_MCU_BUSY < maxRetryTimes_MCU_BUSY
                     if(!shouldRetry) log("[Error] Max retries exceeded!")
                 }
                 if(statusByte and MCU_STATE_CRC_ERROR != 0)
                 {
-                    errorCode = errorCode or MCU_STATE_CRC_ERROR
                     log("[Warning] CRC32 is incorrect from MCU, times : ${++retryTimes_CRC_ERROR}")
+                    errorCode = errorCode or MCU_STATE_CRC_ERROR
                     shouldRetry = retryTimes_CRC_ERROR < maxRetryTimes_CRC_ERROR
                     if(!shouldRetry) log("[Error] Max retries exceeded!")
                 }
                 if(statusByte and MCU_STATE_CMD_ERROR != 0)
                 {
-                    errorCode = errorCode or MCU_STATE_CMD_ERROR
                     log("[Error] MCU command error")
+                    errorCode = errorCode or MCU_STATE_CMD_ERROR
                 }
+                // Unexpected error
                 if(statusByte and (MCU_STATE_BUSY or MCU_STATE_CRC_ERROR or MCU_STATE_CMD_ERROR) == 0)
                 {
                     errorCode = receivedBuffer[CRC_SIZE].toInt()
@@ -504,12 +530,95 @@ object McuProtocol
         }
         else
         {
-            errorCode = BLE_TIME_OUT
             log("[Error] BLE Time out, no response")
+            errorCode = BLE_TIME_OUT
             shouldRetry = false
         }
         
-        return shouldRetry
+        return false
+    }
+    
+    private suspend fun verifyDataPacket(data: ArrayList<Byte>): Boolean
+    {
+        remainingBytes = requestedDataLength - data.size
+        val tempBuffer = ArrayList<Byte>()
+        var dummySize = 0
+        var maxDataLength = 0
+        
+        // Get data via BLE notifications
+        log("Remaining data length: $remainingBytes.")
+        if(remainingBytes > MCU_BUFFER_SIZE - CRC_SIZE - STATUS_SIZE)   // Remaining data length > 1019
+        {
+            //// Get data via 3 BLE notifications
+            if(!getDataInSegments(tempBuffer, 3))
+            {
+                return false
+            }
+            maxDataLength = if(remainingBytes > MCU_BUFFER_SIZE) MCU_BUFFER_SIZE else remainingBytes
+        }
+        else if(((BLE_TRANSFER_SIZE - CRC_SIZE - STATUS_SIZE) < remainingBytes) && (remainingBytes <= (MCU_BUFFER_SIZE - CRC_SIZE - STATUS_SIZE))) // 507 < Remaining data length <= 1019
+        {
+            //// Get data via 2 BLE notifications
+            if(!getDataInSegments(tempBuffer, 2))
+            {
+                return false
+            }
+            maxDataLength = remainingBytes
+        }
+        else    // Remaining data length <= 507
+        {
+            //// Get data via 1 BLE notification
+            if(!getDataInSegments(tempBuffer, 1))
+            {
+                return false
+            }
+            maxDataLength = remainingBytes
+        }
+        
+        if(verifyStatusPacket(tempBuffer))
+        {
+            // Remove dummy and CRC bytes
+            if((maxDataLength + CRC_SIZE + STATUS_SIZE) % MCU_PACKET_SIZE != 0) dummySize = MCU_PACKET_SIZE - ((maxDataLength + CRC_SIZE + STATUS_SIZE) % MCU_PACKET_SIZE)
+            else dummySize = 0
+            data.addAll(tempBuffer.subList(CRC_SIZE + STATUS_SIZE, tempBuffer.size - dummySize))
+            return true
+        }
+        else return shouldRetry
+    }
+    
+    private suspend fun getDataInSegments(tempBuffer: ArrayList<Byte>, times: Int): Boolean
+    {
+        for(i in 0 until times)
+        {
+            if(!waitCharacteristicChanged(waitingNotificationTime))
+            {
+                errorCode = BLE_TIME_OUT
+                log("[Error] Time out at no.${i + 1} transaction.")
+                shouldRetry = false
+                return false
+            }
+            tempBuffer.addAll(receivedBuffer)
+            
+            /*
+                        if(i == 0)    // First time
+            {
+                if(!verifyDataPacket()) return false
+            }
+            else
+            {
+                if(!waitCharacteristicChanged(waitingNotificationTime))
+                {
+                    errorCode = BLE_TIME_OUT
+                    log("[Error] [Read] Time out at no.${i + 1} transaction.")
+                    shouldRetry = false
+                    return false
+                }
+            }
+            
+             */
+        }
+        
+        return true
     }
     
     
@@ -568,99 +677,6 @@ object McuProtocol
         tempPacket.clear()
     }
     
-    private suspend fun getReceivedData(data: ArrayList<Byte>): Boolean
-    {
-        remainingBytes = requestedDataLength - data.size
-        val tempBuffer = ArrayList<Byte>()
-        var dummySize = 0
-        var maxDataLength = 0
-        
-        // Get data via BLE notifications
-        log("Remaining data length: $remainingBytes.")
-        if(remainingBytes > MCU_BUFFER_SIZE - CRC_SIZE - STATUS_SIZE)   // Remaining data length > 1019
-        {
-            //// Get data via 3 BLE notifications
-            if(!getDataInSegments(tempBuffer, 3))
-            {
-                return shouldRetry
-            }
-            maxDataLength = if(remainingBytes > MCU_BUFFER_SIZE) MCU_BUFFER_SIZE else remainingBytes
-        }
-        else if(((BLE_TRANSFER_SIZE - CRC_SIZE - STATUS_SIZE) < remainingBytes) &&
-                (remainingBytes <= (MCU_BUFFER_SIZE - CRC_SIZE - STATUS_SIZE))) // 507 < Remaining data length <= 1019
-        {
-            //// Get data via 2 BLE notifications
-            if(!getDataInSegments(tempBuffer, 2))
-            {
-                return shouldRetry
-            }
-            maxDataLength = remainingBytes
-        }
-        else    // Remaining data length <= 507
-        {
-            //// Get data via 1 BLE notification
-            if(!getDataInSegments(tempBuffer, 1))
-            {
-                return shouldRetry
-            }
-            maxDataLength = remainingBytes
-        }
-        
-        if(verifyStatusPacket(tempBuffer))
-        {
-            // Remove dummy and CRC bytes
-            if((maxDataLength + CRC_SIZE + STATUS_SIZE) % MCU_PACKET_SIZE != 0)
-                dummySize = MCU_PACKET_SIZE - ((maxDataLength + CRC_SIZE + STATUS_SIZE) % MCU_PACKET_SIZE)
-            else dummySize = 0
-            data.addAll(tempBuffer.subList(CRC_SIZE + STATUS_SIZE, tempBuffer.size - dummySize))
-            return true
-        }
-        else return shouldRetry
-
-
-//        if(verifyCRC32(tempBuffer))
-//        {
-//            // Remove dummy and CRC bytes
-//            if((maxDataLength + CRC_SIZE + STATUS_SIZE) % MCU_PACKET_SIZE != 0)
-//                dummySize = MCU_PACKET_SIZE - ((maxDataLength + CRC_SIZE + STATUS_SIZE) % MCU_PACKET_SIZE)
-//            else dummySize = 0
-//            data.addAll(tempBuffer.subList(CRC_SIZE + STATUS_SIZE, tempBuffer.size - dummySize))
-//            return true
-//        }
-//        else
-//        {
-//            errorCode = errorCode or API_CRC_ERROR
-//            log("[Warning] CRC32 is incorrect from API, times : ${++retryTimes_CRC_ERROR}")
-//            shouldRetry = retryTimes_CRC_ERROR < maxRetryTimes_CRC_ERROR
-//            if(!shouldRetry) log("[Error] Max retries exceeded!")
-//            return shouldRetry
-//        }
-    }
-    
-    private suspend fun getDataInSegments(tempBuffer: ArrayList<Byte>, times: Int): Boolean
-    {
-        for(i in 0 until times)
-        {
-            if(i == 0)    // First time
-            {
-                if(!verifyDataPacket()) return false
-            }
-            else
-            {
-                if(!waitCharacteristicChanged(waitingNotificationTime))
-                {
-                    errorCode = BLE_TIME_OUT
-                    log("[Error] [Read] Time out at no.${i + 1} transaction.")
-                    shouldRetry = false
-                    return false
-                }
-            }
-            tempBuffer.addAll(receivedBuffer)
-            
-        }
-        
-        return true
-    }
     
     private suspend fun waitCharacteristicChanged(waitingTime: Long): Boolean
     {
@@ -748,10 +764,6 @@ object McuProtocol
         return true
     }
     
-    fun initActivity(activity: AppCompatActivity)
-    {
-        this.activity = activity
-    }
     
     private fun log(message: String)
     {
@@ -765,26 +777,6 @@ object McuProtocol
             textViewLog.text = "$currentLogText\n$formattedMessage"
             scrollViewLog.post { scrollViewLog.fullScroll(View.FOCUS_DOWN) }
         }
-    }
-    
-    
-    fun setRequestDataLength(length: Int)
-    {
-        requestedDataLength = length
-    }
-    
-    fun setOpCodeLength(length: Int)
-    {
-        opcodeLength = length
-    }
-    fun setNotificationTrigger(value: Boolean)
-    {
-        receivedNotification = value
-    }
-    
-    fun setReceivedData(payload: ArrayList<Byte>)
-    {
-        receivedBuffer = payload
     }
 
 //    fun ArrayList<Byte>.toHexString(): String =
@@ -806,11 +798,6 @@ object McuProtocol
         return builder.toString()
     }
     
-    fun getErrorCode(): Int
-    {
-        return errorCode
-    }
-    
     private fun buildTestPacket(payload: ByteArray): ByteArray
     {
         var length = 0
@@ -821,7 +808,42 @@ object McuProtocol
         log("MCU Write is executing. Input bytes: $length") // TODO mark
         val paddingSize = length - payload.size - 2
         if(paddingSize <= 0) return byteArrayOf(*payload, 0xD0.toByte(), 0xD1.toByte())
-        else return byteArrayOf(*payload, 0xD0.toByte(), 0xD1.toByte(), *ByteArray(paddingSize) { i -> (i % 256).toByte() })
+        else return byteArrayOf(*payload, 0xD0.toByte(), 0xD1.toByte(),
+            *ByteArray(paddingSize) { i -> (i % 256).toByte() })
     }
     
+    fun initActivity(activity: AppCompatActivity)
+    {
+        this.activity = activity
+    }
+    
+    fun setRequestDataLength(length: Int)
+    {
+        requestedDataLength = length
+    }
+    
+    fun setOpCodeLength(length: Int)
+    {
+        opcodeLength = length
+    }
+    
+    fun getOpCodeLength(): Int
+    {
+        return opcodeLength
+    }
+    
+    fun setNotificationTrigger(value: Boolean)
+    {
+        receivedNotification = value
+    }
+    
+    fun setReceivedData(payload: ArrayList<Byte>)
+    {
+        receivedBuffer = payload
+    }
+    
+    fun getErrorCode(): Int
+    {
+        return errorCode
+    }
 }
