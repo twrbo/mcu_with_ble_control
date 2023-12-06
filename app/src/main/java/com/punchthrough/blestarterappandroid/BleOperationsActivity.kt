@@ -63,7 +63,6 @@ import java.util.UUID
 
 class BleOperationsActivity : AppCompatActivity()
 {
-    
     private lateinit var device: BluetoothDevice
     private val dateFormatter = SimpleDateFormat("HH:mm:ss", Locale.TAIWAN)
     private val characteristics by lazy {
@@ -229,7 +228,7 @@ class BleOperationsActivity : AppCompatActivity()
         val layoutDataLength = view.findViewById<TextInputLayout>(R.id.layout_dataLength)
         val layoutOpcodeLength = view.findViewById<TextInputLayout>(R.id.layout_opcodeLength)
         val editTextOpcodeLength = view.findViewById<EditText>(R.id.editText_opcodeLength)
-        editTextOpcodeLength.setText(McuProtocol.getOpCodeLength().toString())
+        editTextOpcodeLength.setText(McuProtocol.getOpcodeLength().toString())
         
         // 增加 radioButtonMCURead 的點選事件監聽器
         radioButtonMCURead.setOnCheckedChangeListener { _, isChecked ->
@@ -267,7 +266,7 @@ class BleOperationsActivity : AppCompatActivity()
                             // Start MCU Read
                             if(requestDataLengthText.isNotBlank())
                             {
-                                McuProtocol.setRequestDataLength(requestDataLengthText.toInt())
+                                McuProtocol.setReadLength(requestDataLengthText.toInt())
                                 CoroutineScope(Dispatchers.Main).launch {
                                     McuProtocol.read(device, characteristic, payload)
                                 }
@@ -282,7 +281,7 @@ class BleOperationsActivity : AppCompatActivity()
                             // Start MCU Write
                             if(editTextOpcodeLength.text.toString().isNotBlank())
                             {
-                                McuProtocol.setOpCodeLength(editTextOpcodeLength.text.toString().toInt())
+                                McuProtocol.setOpcodeLength(editTextOpcodeLength.text.toString().toInt())
                                 CoroutineScope(Dispatchers.Main).launch {
                                     McuProtocol.write(device, characteristic, payload)
                                 }
@@ -336,7 +335,7 @@ class BleOperationsActivity : AppCompatActivity()
                 
                 if(characteristic.value != null)
                 {
-                    McuProtocol.setReceivedData(characteristic.value.toArrayList())
+                    McuProtocol.cacheCharacteristicValue(characteristic.value.toArrayList())
                     McuProtocol.setNotificationTrigger(true)
                 }
             }

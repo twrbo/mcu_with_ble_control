@@ -48,10 +48,8 @@ class CharacteristicAdapter(private val items: List<BluetoothGattCharacteristic>
         private val MCR_PROTOCOL_SERVICE_UUID_UUID: UUID = UUID.fromString("00000000-0100-0001-0101-010101001111")
         private val MCR_PROTOCOL_CHARACTERISTIC_UUID: UUID = UUID.fromString("00000001-0100-0001-0101-010101001111")
         private val ESP32_DEVICE_NAME = "MyESP32"
-        
         fun bind(characteristic: BluetoothGattCharacteristic)
         {
-            
             
             if(characteristic.uuid == MCR_PROTOCOL_CHARACTERISTIC_UUID)
             {
